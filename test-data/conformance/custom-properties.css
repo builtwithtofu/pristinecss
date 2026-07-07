@@ -1,0 +1,8 @@
+/* custom property spacing */
+:root { --shadow: 1px solid rgba(0, 0, 0, .5); }
+/* custom property balanced braces */
+:root { --tokens: { a: b }; }
+/* custom property var fallback */
+.box { color: var(--brand, rebeccapurple); }
+/* registered property */
+@property --brand-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }

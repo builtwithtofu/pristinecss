@@ -1,33 +1,37 @@
 package lexer_test
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/aledsdavies/pristinecss/pkg/lexer"
-	"github.com/aledsdavies/pristinecss/pkg/tokens"
+	"github.com/builtwithtofu/pristinecss/pkg/lexer"
+	"github.com/builtwithtofu/pristinecss/pkg/tokens"
 )
+
+type expectedToken struct {
+	Type    tokens.TokenType
+	Literal []byte
+}
 
 func TestBasicTokens(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []tokens.Token
+		expected []expectedToken
 	}{
 		{
 			name:  "Comments",
 			input: "/* This is a comment */",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.COMMENT, Literal: []byte("/* This is a comment */")},
 			},
 		},
 		{
 			name:  "Simple element selector",
 			input: "div { color: blue; }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.IDENT, Literal: []byte("div")},
 				{Type: tokens.LBRACE, Literal: []byte("{")},
 				{Type: tokens.IDENT, Literal: []byte("color")},
@@ -46,12 +50,12 @@ func TestSelectors(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []tokens.Token
+		expected []expectedToken
 	}{
 		{
 			name:  "Class selector",
 			input: ".highlight { background-color: yellow; }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.DOT, Literal: []byte(".")},
 				{Type: tokens.IDENT, Literal: []byte("highlight")},
 				{Type: tokens.LBRACE, Literal: []byte("{")},
@@ -65,7 +69,7 @@ func TestSelectors(t *testing.T) {
 		{
 			name:  "ID selector",
 			input: "#main { font-size: 16px; }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.HASH, Literal: []byte("#")},
 				{Type: tokens.IDENT, Literal: []byte("main")},
 				{Type: tokens.LBRACE, Literal: []byte("{")},
@@ -80,7 +84,7 @@ func TestSelectors(t *testing.T) {
 		{
 			name:  "Attribute selector",
 			input: "a[href^=\"https://\"] { color: green; }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.IDENT, Literal: []byte("a")},
 				{Type: tokens.LBRACKET, Literal: []byte("[")},
 				{Type: tokens.IDENT, Literal: []byte("href")},
@@ -104,12 +108,12 @@ func TestPseudoSelectors(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []tokens.Token
+		expected []expectedToken
 	}{
 		{
 			name:  "Pseudo-class",
 			input: "a:hover { color: red; }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.IDENT, Literal: []byte("a")},
 				{Type: tokens.COLON, Literal: []byte(":")},
 				{Type: tokens.IDENT, Literal: []byte("hover")},
@@ -124,7 +128,7 @@ func TestPseudoSelectors(t *testing.T) {
 		{
 			name:  "Pseudo-element",
 			input: "p::first-line { text-transform: uppercase; }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.IDENT, Literal: []byte("p")},
 				{Type: tokens.DBLCOLON, Literal: []byte("::")},
 				{Type: tokens.IDENT, Literal: []byte("first-line")},
@@ -145,12 +149,12 @@ func TestComplexSelectors(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []tokens.Token
+		expected []expectedToken
 	}{
 		{
 			name:  "Combinators",
 			input: "div > p + ul ~ span { color: red; }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.IDENT, Literal: []byte("div")},
 				{Type: tokens.GREATER, Literal: []byte(">")},
 				{Type: tokens.IDENT, Literal: []byte("p")},
@@ -169,7 +173,7 @@ func TestComplexSelectors(t *testing.T) {
 		{
 			name:  "Multiple Selectors",
 			input: "h1, h2, h3 { font-family: sans-serif; }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.IDENT, Literal: []byte("h1")},
 				{Type: tokens.COMMA, Literal: []byte(",")},
 				{Type: tokens.IDENT, Literal: []byte("h2")},
@@ -193,7 +197,7 @@ func TestComplexSelectors(t *testing.T) {
                 margin: -.5px 10px .2em 0;
                 transform: scale(1.1, .9);
             }`,
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.DOT, Literal: []byte(".")},
 				{Type: tokens.IDENT, Literal: []byte("numbers")},
 				{Type: tokens.LBRACE, Literal: []byte("{")},
@@ -242,12 +246,12 @@ func TestAtRules(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []tokens.Token
+		expected []expectedToken
 	}{
 		{
 			name:  "Media Query",
 			input: "@media screen and (max-width: 600px) { body { font-size: 14px; } }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.AT, Literal: []byte("@")},
 				{Type: tokens.IDENT, Literal: []byte("media")},
 				{Type: tokens.IDENT, Literal: []byte("screen")},
@@ -273,7 +277,7 @@ func TestAtRules(t *testing.T) {
 		{
 			name:  "Keyframes",
 			input: "@keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.AT, Literal: []byte("@")},
 				{Type: tokens.IDENT, Literal: []byte("keyframes")},
 				{Type: tokens.IDENT, Literal: []byte("fadeIn")},
@@ -306,12 +310,12 @@ func TestURIVariations(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []tokens.Token
+		expected []expectedToken
 	}{
 		{
 			name:  "Simple URL",
 			input: ".foo {background-image: url('image.jpg');}",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.DOT, Literal: []byte(".")},
 				{Type: tokens.IDENT, Literal: []byte("foo")},
 				{Type: tokens.LBRACE, Literal: []byte("{")},
@@ -325,7 +329,7 @@ func TestURIVariations(t *testing.T) {
 		{
 			name:  "URL with protocol",
 			input: "background-image: url('https://example.com/image.png');",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.IDENT, Literal: []byte("background-image")},
 				{Type: tokens.COLON, Literal: []byte(":")},
 				{Type: tokens.URI, Literal: []byte("url('https://example.com/image.png')")},
@@ -335,7 +339,7 @@ func TestURIVariations(t *testing.T) {
 		{
 			name:  "URL without quotes",
 			input: "background-image: url(image.gif);",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.IDENT, Literal: []byte("background-image")},
 				{Type: tokens.COLON, Literal: []byte(":")},
 				{Type: tokens.URI, Literal: []byte("url(image.gif)")},
@@ -345,7 +349,7 @@ func TestURIVariations(t *testing.T) {
 		{
 			name:  "Data URI",
 			input: `background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'></svg>");`,
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.IDENT, Literal: []byte("background-image")},
 				{Type: tokens.COLON, Literal: []byte(":")},
 				{Type: tokens.URI, Literal: []byte(`url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'></svg>")`)},
@@ -355,7 +359,7 @@ func TestURIVariations(t *testing.T) {
 		{
 			name:  "URL with parentheses",
 			input: `background-image: url("https://example.com/image(1).jpg");`,
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.IDENT, Literal: []byte("background-image")},
 				{Type: tokens.COLON, Literal: []byte(":")},
 				{Type: tokens.URI, Literal: []byte(`url("https://example.com/image(1).jpg")`)},
@@ -365,7 +369,7 @@ func TestURIVariations(t *testing.T) {
 		{
 			name:  "Multiple URLs",
 			input: `background: url("image1.jpg"), url('image2.png'), url(image3.gif);`,
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.IDENT, Literal: []byte("background")},
 				{Type: tokens.COLON, Literal: []byte(":")},
 				{Type: tokens.URI, Literal: []byte(`url("image1.jpg")`)},
@@ -385,12 +389,12 @@ func TestCSSVariables(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []tokens.Token
+		expected []expectedToken
 	}{
 		{
 			name:  "CSS Variables",
 			input: ":root { --main-color: blue; } body { color: var(--main-color); }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.COLON, Literal: []byte(":")},
 				{Type: tokens.IDENT, Literal: []byte("root")},
 				{Type: tokens.LBRACE, Literal: []byte("{")},
@@ -420,12 +424,12 @@ func TestCalcFunction(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []tokens.Token
+		expected []expectedToken
 	}{
 		{
 			name:  "Calc Function",
 			input: "div { width: calc(100% - 20px); height: 100vh; }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.IDENT, Literal: []byte("div")},
 				{Type: tokens.LBRACE, Literal: []byte("{")},
 				{Type: tokens.IDENT, Literal: []byte("width")},
@@ -456,12 +460,12 @@ func TestEscapedCharacters(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []tokens.Token
+		expected []expectedToken
 	}{
 		{
 			name:  "Escaped characters in identifiers",
 			input: ".foo\\.bar { color: red; }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.DOT, Literal: []byte(".")},
 				{Type: tokens.IDENT, Literal: []byte("foo\\.bar")},
 				{Type: tokens.LBRACE, Literal: []byte("{")},
@@ -475,7 +479,7 @@ func TestEscapedCharacters(t *testing.T) {
 		{
 			name:  "Escaped characters in attribute selectors",
 			input: "a[href=\"foo\\\"bar\"] { color: blue; }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.IDENT, Literal: []byte("a")},
 				{Type: tokens.LBRACKET, Literal: []byte("[")},
 				{Type: tokens.IDENT, Literal: []byte("href")},
@@ -499,7 +503,7 @@ func TestUnicodeAndSpecialCharacters(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []tokens.Token
+		expected []expectedToken
 	}{
 		{
 			name: "Unicode and special character identifiers",
@@ -515,7 +519,7 @@ func TestUnicodeAndSpecialCharacters(t *testing.T) {
     color: red;
 }
 `,
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.HASH, Literal: []byte("#")},
 				{Type: tokens.IDENT, Literal: []byte("☃")},
 				{Type: tokens.LBRACE, Literal: []byte("{")},
@@ -569,7 +573,7 @@ func TestComplexPropertyValues(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []tokens.Token
+		expected []expectedToken
 	}{
 		{
 			name: "Complex property values",
@@ -579,7 +583,7 @@ func TestComplexPropertyValues(t *testing.T) {
                                   radial-gradient(circle, #0000ff, #ffff00);
                 font: bold 12px/14px "Helvetica", sans-serif;
             }`,
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.DOT, Literal: []byte(".")},
 				{Type: tokens.IDENT, Literal: []byte("gradient")},
 				{Type: tokens.LBRACE, Literal: []byte("{")},
@@ -634,7 +638,7 @@ func TestComplexPropertyValues(t *testing.T) {
                     background: yellow;
                 }
             }`,
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.DOT, Literal: []byte(".")},
 				{Type: tokens.IDENT, Literal: []byte("parent")},
 				{Type: tokens.LBRACE, Literal: []byte("{")},
@@ -677,16 +681,17 @@ func TestComplexPropertyValues(t *testing.T) {
 func runTests(t *testing.T, tests []struct {
 	name     string
 	input    string
-	expected []tokens.Token
+	expected []expectedToken
 }) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tokens := lexer.Lex(strings.NewReader(tt.input))
+			source := []byte(tt.input)
+			tokens := lexer.Lex(source)
 
 			if len(tokens)-1 != len(tt.expected) {
 				strs := []string{}
 				for _, t := range tokens {
-					strs = append(strs, string(t.Literal))
+					strs = append(strs, string(t.Literal(source)))
 				}
 
 				t.Fatalf("Token count mismatch. Expected %d tokens, got %d [%s]", len(tt.expected), len(tokens)-1, strings.Join(strs, " "))
@@ -697,8 +702,8 @@ func runTests(t *testing.T, tests []struct {
 				if tok.Type != expected.Type {
 					t.Errorf("Token %d: expected type %v, got %v", i, expected.Type, tok.Type)
 				}
-				if !bytesEqual(tok.Literal, expected.Literal) {
-					t.Errorf("Token %d: expected literal %q, got %q", i, string(expected.Literal), string(tok.Literal))
+				if !bytesEqual(tok.Literal(source), expected.Literal) {
+					t.Errorf("Token %d: expected literal %q, got %q", i, string(expected.Literal), string(tok.Literal(source)))
 				}
 				if tok.Line == 0 || tok.Column == 0 {
 					t.Errorf("Token %d: line or column not set. got line=%d, column=%d", i, tok.Line, tok.Column)
@@ -712,12 +717,12 @@ func TestLexerIllegalCases(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []tokens.Token
+		expected []expectedToken
 	}{
 		{
 			name:  "Invalid hex color",
 			input: ".invalid { color: #1234ZZ; }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.DOT, Literal: []byte(".")},
 				{Type: tokens.IDENT, Literal: []byte("invalid")},
 				{Type: tokens.LBRACE, Literal: []byte("{")},
@@ -733,7 +738,7 @@ func TestLexerIllegalCases(t *testing.T) {
 		{
 			name:  "Invalid unit combination",
 			input: ".invalid-unit { width: 50+px; }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.DOT, Literal: []byte(".")},
 				{Type: tokens.IDENT, Literal: []byte("invalid-unit")},
 				{Type: tokens.LBRACE, Literal: []byte("{")},
@@ -749,7 +754,7 @@ func TestLexerIllegalCases(t *testing.T) {
 		{
 			name:  "Invalid percentage",
 			input: ".invalid-percentage { height: 100vh%; }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.DOT, Literal: []byte(".")},
 				{Type: tokens.IDENT, Literal: []byte("invalid-percentage")},
 				{Type: tokens.LBRACE, Literal: []byte("{")},
@@ -765,7 +770,7 @@ func TestLexerIllegalCases(t *testing.T) {
 		{
 			name:  "Invalid property",
 			input: ".invalid-property { colo r: red; }",
-			expected: []tokens.Token{
+			expected: []expectedToken{
 				{Type: tokens.DOT, Literal: []byte(".")},
 				{Type: tokens.IDENT, Literal: []byte("invalid-property")},
 				{Type: tokens.LBRACE, Literal: []byte("{")},
@@ -781,7 +786,8 @@ func TestLexerIllegalCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tokens := lexer.Lex(strings.NewReader(tt.input))
+			source := []byte(tt.input)
+			tokens := lexer.Lex(source)
 
 			if len(tokens)-1 != len(tt.expected) {
 				t.Fatalf("Token count mismatch. Expected %d tokens, got %d", len(tt.expected), len(tokens))
@@ -792,8 +798,8 @@ func TestLexerIllegalCases(t *testing.T) {
 				if got.Type != expected.Type {
 					t.Errorf("Token %d: expected type %v, got %v", i, expected.Type, got.Type)
 				}
-				if !bytesEqual(got.Literal, expected.Literal) {
-					t.Errorf("Token %d: expected literal %q, got %q", i, string(expected.Literal), string(got.Literal))
+				if !bytesEqual(got.Literal(source), expected.Literal) {
+					t.Errorf("Token %d: expected literal %q, got %q", i, string(expected.Literal), string(got.Literal(source)))
 				}
 			}
 		})
@@ -835,18 +841,17 @@ func TestFrameworks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			input, err := os.Open(tt.filepath)
+			input, err := os.ReadFile(tt.filepath)
 			if err != nil {
-				t.Fatalf("Could not open the file %s: %v", tt.filepath, err)
+				t.Fatalf("Could not read the file %s: %v", tt.filepath, err)
 			}
-			defer input.Close()
 
 			toks := lexer.Lex(input)
 			illegalCount := 0
 			for _, tok := range toks {
 				if tok.Type == tokens.ILLEGAL {
 					illegalCount++
-					t.Errorf("Found an ILLEGAL token: %v %s  %d:%d", tok.Type, string(tok.Literal), tok.Line, tok.Column)
+					t.Errorf("Found an ILLEGAL token: %v %s  %d:%d", tok.Type, string(tok.Literal(input)), tok.Line, tok.Column)
 				}
 			}
 
@@ -854,6 +859,34 @@ func TestFrameworks(t *testing.T) {
 				t.Errorf("Expected %d ILLEGAL tokens, but found %d", tt.expected, illegalCount)
 			}
 		})
+	}
+}
+
+func TestCDOCDCAreSkipped(t *testing.T) {
+	source := []byte("<!-- .x { color: red; } -->")
+	toks := lexer.Lex(source)
+	for _, tok := range toks {
+		if string(tok.Literal(source)) == "<!--" || string(tok.Literal(source)) == "-->" {
+			t.Fatalf("CDO/CDC token was emitted: %#v", tok)
+		}
+	}
+	want := []expectedToken{
+		{Type: tokens.DOT, Literal: []byte(".")},
+		{Type: tokens.IDENT, Literal: []byte("x")},
+		{Type: tokens.LBRACE, Literal: []byte("{")},
+		{Type: tokens.IDENT, Literal: []byte("color")},
+		{Type: tokens.COLON, Literal: []byte(":")},
+		{Type: tokens.IDENT, Literal: []byte("red")},
+		{Type: tokens.SEMICOLON, Literal: []byte(";")},
+		{Type: tokens.RBRACE, Literal: []byte("}")},
+	}
+	if len(toks)-1 != len(want) {
+		t.Fatalf("tokens = %d, want %d", len(toks)-1, len(want))
+	}
+	for i, expected := range want {
+		if toks[i].Type != expected.Type || !bytesEqual(toks[i].Literal(source), expected.Literal) {
+			t.Fatalf("token %d = (%v, %q), want (%v, %q)", i, toks[i].Type, toks[i].Literal(source), expected.Type, expected.Literal)
+		}
 	}
 }
 
@@ -880,8 +913,7 @@ func BenchmarkFrameworks(b *testing.B) {
 			b.ResetTimer()
 
 			for i := 0; i < b.N; i++ {
-				reader := bytes.NewReader(content)
-				tokens := lexer.Lex(reader)
+				tokens := lexer.Lex(content)
 				_ = tokens
 			}
 		})

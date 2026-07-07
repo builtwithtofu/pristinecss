@@ -1,0 +1,6 @@
+/* unknown statement */
+@future-statement foo(bar) baz;
+/* unknown block */
+@quantum-flex feature(1 2 3) { .future { color: red; } @media (width >= 1px) { .inside { color: blue; } } }
+/* unknown nested */
+.host { @unknown-nested thing { color: green; } color: black; }

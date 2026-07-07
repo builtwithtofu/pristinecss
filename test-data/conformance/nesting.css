@@ -1,0 +1,14 @@
+/* mixed declarations and nested rules */
+.card { color: black; & .title { color: blue; } background: white; }
+/* bare nested selector */
+.card { .title { font-weight: bold; } }
+/* nesting pseudo */
+.button { &:hover { color: red; } }
+/* ancestor nesting */
+.button { .toolbar & { color: green; } }
+/* nesting in function pseudo */
+.button { :is(&) { color: purple; } }
+/* nested at-rule with bare declaration */
+.card { @media (width >= 40rem) { color: red; .title { color: blue; } } }
+/* nested supports */
+.card { @supports (display: grid) { display: grid; } }

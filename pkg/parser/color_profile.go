@@ -4,16 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aledsdavies/pristinecss/pkg/tokens"
+	"github.com/builtwithtofu/pristinecss/pkg/tokens"
 )
-
-const (
-	ColorProfile AtType = "color-profile"
-)
-
-func init() {
-	RegisterAt(ColorProfile, visitColorProfileAtRule, func() AtRule { return &ColorProfileAtRule{} })
-}
 
 type ColorProfileAtRule struct {
 	Name         []byte
@@ -21,8 +13,8 @@ type ColorProfileAtRule struct {
 	Declarations []Declaration
 }
 
-func (r *ColorProfileAtRule) Type() NodeType   { return NodeAtRule }
-func (r *ColorProfileAtRule) AtType() AtType   { return ColorProfile }
+func (r *ColorProfileAtRule) Type() NodeType { return NodeAtRule }
+func (r *ColorProfileAtRule) AtType() AtType { return AtColorProfile }
 func (r *ColorProfileAtRule) String() string {
 	var sb strings.Builder
 	sb.WriteString("ColorProfileAtRule{\n")
@@ -46,11 +38,11 @@ func visitColorProfileAtRule(pv *ParseVisitor, node AtRule) {
 	pv.advance() // Consume 'color-profile'
 
 	if pv.currentTokenIs(tokens.IDENT) {
-		if string(pv.currentToken.Literal) == "device-cmyk" {
+		if string(pv.currentLiteral()) == "device-cmyk" {
 			cp.IsDeviceCMYK = true
 			pv.advance()
-		} else if pv.currentToken.Literal[0] == '-' && pv.currentToken.Literal[1] == '-' {
-			cp.Name = pv.currentToken.Literal
+		} else if isDashedIdent(pv.currentLiteral()) {
+			cp.Name = pv.currentLiteral()
 			pv.advance()
 		} else {
 			pv.addError("Expected <dashed-ident> or 'device-cmyk' after @color-profile", pv.currentToken)
@@ -71,9 +63,8 @@ func visitColorProfileAtRule(pv *ParseVisitor, node AtRule) {
 			pv.skipToNextSemicolonOrBrace()
 			continue
 		}
-		declaration := &Declaration{
-			Key: pv.currentToken.Literal,
-		}
+		declaration := pv.arena.newDeclaration()
+		declaration.Key = pv.currentLiteral()
 		visitDeclaration(pv, declaration)
 		cp.Declarations = append(cp.Declarations, *declaration)
 

@@ -4,16 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aledsdavies/pristinecss/pkg/tokens"
+	"github.com/builtwithtofu/pristinecss/pkg/tokens"
 )
-
-const (
-	FontFeatureValues AtType = "font-feature-values"
-)
-
-func init() {
-	RegisterAt(FontFeatureValues, visitFontFeatureValuesAtRule, func() AtRule { return &FontFeatureValuesAtRule{} })
-}
 
 type FontFeatureValuesAtRule struct {
 	FontFamilies [][]byte
@@ -25,8 +17,8 @@ type FontFeatureValuesBlock struct {
 	Declarations []Declaration
 }
 
-func (r *FontFeatureValuesAtRule) Type() NodeType   { return NodeAtRule }
-func (r *FontFeatureValuesAtRule) AtType() AtType   { return FontFeatureValues }
+func (r *FontFeatureValuesAtRule) Type() NodeType { return NodeAtRule }
+func (r *FontFeatureValuesAtRule) AtType() AtType { return AtFontFeatureValues }
 func (r *FontFeatureValuesAtRule) String() string {
 	var sb strings.Builder
 	sb.WriteString("FontFeatureValuesAtRule{\n")
@@ -65,8 +57,10 @@ func visitFontFeatureValuesAtRule(pv *ParseVisitor, node AtRule) {
 
 	// Parse font families
 	for {
+		mark := pv.progressMark()
 		if pv.currentTokenIs(tokens.STRING) {
-			ffv.FontFamilies = append(ffv.FontFamilies, pv.currentToken.Literal[1:len(pv.currentToken.Literal)-1]) // Remove quotes
+			lit := pv.currentLiteral()
+			ffv.FontFamilies = append(ffv.FontFamilies, lit[1:len(lit)-1]) // Remove quotes
 			pv.advance()
 		} else if pv.currentTokenIs(tokens.IDENT) {
 			var familyName strings.Builder
@@ -74,13 +68,14 @@ func visitFontFeatureValuesAtRule(pv *ParseVisitor, node AtRule) {
 				if familyName.Len() > 0 {
 					familyName.WriteByte(' ')
 				}
-				familyName.Write(pv.currentToken.Literal)
+				familyName.Write(pv.currentLiteral())
 				pv.advance()
 			}
 			ffv.FontFamilies = append(ffv.FontFamilies, []byte(familyName.String()))
 		} else {
 			break
 		}
+		pv.ensureProgress(mark, "font-feature-values family list")
 
 		if pv.currentTokenIs(tokens.COMMA) {
 			pv.advance()
@@ -95,6 +90,7 @@ func visitFontFeatureValuesAtRule(pv *ParseVisitor, node AtRule) {
 
 	// Parse feature value blocks
 	for !pv.currentTokenIs(tokens.RBRACE) && !pv.currentTokenIs(tokens.EOF) {
+		mark := pv.progressMark()
 		if !pv.currentTokenIs(tokens.AT) {
 			pv.addError("Expected feature value block starting with '@'", pv.currentToken)
 			pv.skipToNextSemicolonOrBrace()
@@ -109,7 +105,7 @@ func visitFontFeatureValuesAtRule(pv *ParseVisitor, node AtRule) {
 		}
 
 		block := FontFeatureValuesBlock{
-			Name: pv.currentToken.Literal,
+			Name: pv.currentLiteral(),
 		}
 		pv.advance()
 
@@ -123,11 +119,10 @@ func visitFontFeatureValuesAtRule(pv *ParseVisitor, node AtRule) {
 				pv.skipToNextSemicolonOrBrace()
 				continue
 			}
-			declaration := Declaration{
-				Key: pv.currentToken.Literal,
-			}
-			visitDeclaration(pv, &declaration)
-			block.Declarations = append(block.Declarations, declaration)
+			declaration := pv.arena.newDeclaration()
+			declaration.Key = pv.currentLiteral()
+			visitDeclaration(pv, declaration)
+			block.Declarations = append(block.Declarations, *declaration)
 
 			if pv.currentTokenIs(tokens.SEMICOLON) {
 				pv.advance() // Consume ';'
@@ -136,6 +131,7 @@ func visitFontFeatureValuesAtRule(pv *ParseVisitor, node AtRule) {
 
 		pv.consume(tokens.RBRACE, "Expected '}' to close feature value block")
 		ffv.Blocks = append(ffv.Blocks, block)
+		pv.ensureProgress(mark, "font-feature-values block")
 	}
 
 	pv.consume(tokens.RBRACE, "Expected '}' to close @font-feature-values rule")

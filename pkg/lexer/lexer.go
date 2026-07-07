@@ -2,11 +2,8 @@ package lexer
 
 import (
 	"bytes"
-	"io"
-	"log"
 
-	"github.com/aledsdavies/pristinecss/pkg/tokens"
-	mempool "github.com/aledsdavies/pristinecss/pkg/utils"
+	"github.com/builtwithtofu/pristinecss/pkg/tokens"
 )
 
 const (
@@ -22,6 +19,7 @@ const (
 	EQUALS      = '='
 	PLUS        = '+'
 	GREATER     = '>'
+	LESS        = '<'
 	TILDE       = '~'
 	PIPE        = '|'
 	CARET       = '^'
@@ -62,41 +60,9 @@ func init() {
 	}
 }
 
-var tokenPool *mempool.Pool[*tokens.Token]
-var lexerPool *mempool.Pool[*lexer]
-var bufferPool *mempool.Pool[*PoolByteBuffer]
-
-func init() {
-	tokenPool = mempool.NewPool(
-		func() *tokens.Token { return &tokens.Token{} },
-		mempool.WithCapacity(1),
-	)
-	lexerPool = mempool.NewPool(
-		func() *lexer {
-			l := &lexer{}
-			l.Erase()
-			return l
-		},
-		mempool.WithCapacity(10),
-	)
-	bufferPool = mempool.NewPool(
-		func() *PoolByteBuffer { return &PoolByteBuffer{Buffer: bytes.Buffer{}} },
-		mempool.WithCapacity(10),
-	)
-}
-
-type PoolByteBuffer struct {
-	bytes.Buffer
-}
-
-func (pbb *PoolByteBuffer) Erase() {
-	pbb.Reset()
-}
-
 // estimateTokenCount estimates the number of tokens based on input size
 func estimateTokenCount(inputSize int) int {
-	// This is a rough estimate and may need tuning based on your specific CSS patterns
-	return inputSize / 4
+	return inputSize/3 + 16
 }
 
 type lexer struct {
@@ -106,21 +72,14 @@ type lexer struct {
 	ch           byte
 	line         int
 	column       int
-	logger       *log.Logger
 }
 
-func Lex(input io.Reader) []tokens.Token {
-	l := lexerPool.Get()
-	defer lexerPool.Put(l)
-
-	buf := bufferPool.Get()
-	defer bufferPool.Put(buf)
-
-	_, err := io.Copy(&buf.Buffer, input)
-	if err != nil {
-		log.Fatalf("Fatal error reading input: %v", err)
+func Lex(input []byte) []tokens.Token {
+	l := lexer{
+		input:  input,
+		line:   1,
+		column: 0,
 	}
-	l.input = buf.Bytes()
 	l.readChar()
 
 	return l.tokenize()
@@ -140,27 +99,30 @@ func (l *lexer) tokenize() []tokens.Token {
 	result := make([]tokens.Token, 0, estimatedTokens)
 	for {
 		tok := l.nextToken()
-		result = append(result, *tok)
+		result = append(result, tok)
 		if tok.Type == tokens.EOF {
-			tokenPool.Put(tok)
 			break
 		}
-		tokenPool.Put(tok)
 	}
 
 	return result
 }
 
-func (l *lexer) nextToken() *tokens.Token {
+func (l *lexer) nextToken() tokens.Token {
 	l.skipWhitespace()
-	tok := tokenPool.Get()
-	tok.Line = l.line
-	tok.Column = l.column
+	for l.skipCDOCDC() {
+		l.skipWhitespace()
+	}
+	tok := tokens.Token{
+		Line:   uint32(l.line),
+		Column: uint32(l.column),
+	}
 	start := l.position
 
 	if l.ch == EOF {
 		tok.Type = tokens.EOF
-		tok.Literal = []byte{}
+		tok.Start = uint32(start)
+		tok.End = uint32(start)
 		return tok
 	}
 
@@ -189,6 +151,8 @@ func (l *lexer) nextToken() *tokens.Token {
 		tok.Type = tokens.PLUS
 	case GREATER:
 		tok.Type = tokens.GREATER
+	case LESS:
+		tok.Type = tokens.LESS
 	case TILDE:
 		tok.Type = tokens.TILDE
 	case PIPE:
@@ -218,12 +182,12 @@ func (l *lexer) nextToken() *tokens.Token {
 			tok.Type = tokens.COLON
 		}
 	case DOT:
-        if isDigit[l.peekChar()] {
-            tok.Type = tokens.NUMBER
-            l.readNumber()
-        } else {
-            tok.Type = tokens.DOT
-        }
+		if isDigit[l.peekChar()] {
+			tok.Type = tokens.NUMBER
+			l.readNumber()
+		} else {
+			tok.Type = tokens.DOT
+		}
 	case HASH:
 		tok.Type = l.readHashOrColor()
 	case DASH:
@@ -266,9 +230,26 @@ func (l *lexer) nextToken() *tokens.Token {
 	}
 
 	end := l.position
-	tok.Literal = l.getLiteral(start, end)
+	tok.Start = uint32(start)
+	tok.End = uint32(end)
 
 	return tok
+}
+
+func (l *lexer) skipCDOCDC() bool {
+	if l.ch == '<' && l.peekChar() == '!' && l.peekNextChar() == '-' && l.peekThirdChar() == '-' {
+		for i := 0; i < 4; i++ {
+			l.readChar()
+		}
+		return true
+	}
+	if l.ch == '-' && l.peekChar() == '-' && l.peekNextChar() == '>' {
+		for i := 0; i < 3; i++ {
+			l.readChar()
+		}
+		return true
+	}
+	return false
 }
 
 func (l *lexer) readChar() {
@@ -288,22 +269,6 @@ func (l *lexer) readChar() {
 	}
 }
 
-func (l *lexer) getLiteral(start, end int) []byte {
-	if start > end || start >= len(l.input) {
-		return []byte{}
-	}
-
-	end = min(end, len(l.input))
-	return l.input[start:end]
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func (l *lexer) peekChar() byte {
 	if l.readPosition >= len(l.input) {
 		return 0
@@ -316,6 +281,13 @@ func (l *lexer) peekNextChar() byte {
 		return 0
 	}
 	return l.input[l.readPosition+1]
+}
+
+func (l *lexer) peekThirdChar() byte {
+	if l.readPosition+2 >= len(l.input) {
+		return 0
+	}
+	return l.input[l.readPosition+2]
 }
 
 func (l *lexer) handleSlash() tokens.TokenType {

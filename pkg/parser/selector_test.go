@@ -4,8 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aledsdavies/pristinecss/pkg/lexer"
-	"github.com/google/go-cmp/cmp"
+	"github.com/builtwithtofu/pristinecss/pkg/lexer"
 )
 
 func TestBasicSelectors(t *testing.T) {
@@ -130,6 +129,7 @@ func TestComplexSelectors(t *testing.T) {
 					&Selector{
 						Selectors: []SelectorValue{
 							{Type: Element, Value: []byte("article")},
+							{Type: Combinator, Value: []byte(" ")},
 							{Type: Element, Value: []byte("p")},
 						},
 						Rules: []Node{
@@ -257,21 +257,15 @@ func runTests(t *testing.T, tests []struct {
 }) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tokens := lexer.Lex(strings.NewReader(tt.input))
-			result, errors := Parse(tokens)
+			source := []byte(tt.input)
+			tokens := lexer.Lex(source)
+			result, errors := Parse(source, tokens)
 			if len(errors) > 0 {
 				t.Errorf("Unexpected errors: %v", errors)
 			}
 			diffStylesheet(t, tt.expected, result)
 		})
 	}
-}
-
-// Custom comparer function
-func stylesheetComparer() cmp.Option {
-	return cmp.Comparer(func(x, y *Stylesheet) bool {
-		return x.String() == y.String()
-	})
 }
 
 // Custom diff function

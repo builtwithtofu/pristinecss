@@ -4,27 +4,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aledsdavies/pristinecss/pkg/tokens"
+	"github.com/builtwithtofu/pristinecss/pkg/tokens"
 )
-
-const (
-	NodeSelector NodeType = "selector"
-)
-
-func init() {
-	RegisterNodeType(NodeSelector, visitSelector)
-}
 
 var _ Node = (*Selector)(nil)
 
 type Selector struct {
 	Selectors []SelectorValue
-
-	// Comment
-	// At Rules
-	// Selectors (nested)
-	// Declerations
-	Rules []Node
+	Rules     []Node
 }
 
 func (c *Selector) Type() NodeType { return NodeSelector }
@@ -58,6 +45,9 @@ const (
 	Attribute
 	Pseudo
 	Combinator
+	Universal
+	Nesting
+	NamespacePrefix
 )
 
 type SelectorValue struct {
@@ -66,8 +56,21 @@ type SelectorValue struct {
 }
 
 func (sv SelectorValue) String() string {
-	return fmt.Sprintf("{Type: %s, Value: %q}", selectorTypeToString(sv.Type), sv.Value)
+	return fmt.Sprintf("{Type: %s, Value: %q}", selectorTypeToString(sv.Type), sv.displayValueString())
 }
+
+func (sv SelectorValue) displayValueString() string {
+	switch {
+	case sv.Type == Class && (len(sv.Value) == 0 || sv.Value[0] != '.'):
+		return "." + string(sv.Value)
+	case sv.Type == ID && (len(sv.Value) == 0 || sv.Value[0] != '#'):
+		return "#" + string(sv.Value)
+	default:
+		return string(sv.Value)
+	}
+}
+
+const maxRuleBlockDepth = 128
 
 func visitSelector(pv *ParseVisitor, node Node) {
 	s := node.(*Selector)
@@ -75,172 +78,308 @@ func visitSelector(pv *ParseVisitor, node Node) {
 	if !pv.consume(tokens.LBRACE, "Expected '{' after selector") {
 		return
 	}
-	for !pv.currentTokenIs(tokens.RBRACE) && !pv.currentTokenIs(tokens.EOF) {
-		switch pv.currentToken.Type {
-		case tokens.COMMENT:
-			comment := &Comment{Text: pv.currentToken.Literal}
-			visitComment(pv, comment)
-			s.Rules = append(s.Rules, comment)
-		case tokens.IDENT:
-			declaration := &Declaration{
-				Key: pv.currentToken.Literal,
-			}
-			visitDeclaration(pv, declaration)
-			s.Rules = append(s.Rules, declaration)
-
-			if pv.currentTokenIs(tokens.SEMICOLON) {
-				pv.advance() // Consume ';'
-			}
-		default:
-			pv.addError("Expected property name or comment", pv.currentToken)
-			pv.skipToNextSemicolonOrBrace()
-		}
-	}
+	s.Rules = pv.parseRuleBlock(false)
 	pv.consume(tokens.RBRACE, "Expected '}' at the end of declaration block")
 }
 
-func (pv *ParseVisitor) parseSelector(s *Selector) {
-	for !pv.currentTokenIs(tokens.EOF) && !pv.currentTokenIs(tokens.LBRACE) {
-		switch pv.currentToken.Type {
-		case tokens.COMMENT:
-			// Handle comments in selector definition
-			comment := &Comment{Text: pv.currentToken.Literal}
+func (pv *ParseVisitor) parseRuleBlock(allowBareDeclarations bool) []Node {
+	pv.blockDepth++
+	defer func() { pv.blockDepth-- }()
+	if pv.blockDepth > maxRuleBlockDepth {
+		pv.addError(fmt.Sprintf("CSS nesting exceeds maximum depth of %d", maxRuleBlockDepth), pv.currentToken)
+		pv.skipCurrentBlock()
+		return nil
+	}
+
+	var rules []Node
+	for !pv.currentTokenIs(tokens.RBRACE) && !pv.currentTokenIs(tokens.EOF) {
+		mark := pv.progressMark()
+		switch {
+		case pv.currentTokenIs(tokens.COMMENT):
+			comment := pv.arena.newComment()
+			comment.Text = pv.currentLiteral()
 			visitComment(pv, comment)
-			s.Rules = append(s.Rules, comment)
-		case tokens.IDENT:
-			s.Selectors = append(s.Selectors, SelectorValue{
-				Type:  Element,
-				Value: pv.currentToken.Literal,
-			})
-			pv.advance()
-		case tokens.DOT:
-			if pv.nextTokenIs(tokens.IDENT) {
-				pv.advance() // Consume the dot
-				s.Selectors = append(s.Selectors, SelectorValue{
-					Type:  Class,
-					Value: append([]byte("."), pv.currentToken.Literal...),
-				})
-				pv.advance() // Consume the identifier
-			} else {
-				pv.addError("Expected identifier after '.'", pv.nextToken)
-				pv.advance() // Skip the dot
+			rules = pv.arena.appendNode(rules, comment)
+		case pv.currentTokenIs(tokens.AT):
+			if at := parseAtRule(pv); at != nil {
+				rules = pv.arena.appendNode(rules, at)
 			}
-		case tokens.HASH:
-			if pv.nextTokenIs(tokens.IDENT) {
-				pv.advance() // Consume the hash
-				s.Selectors = append(s.Selectors, SelectorValue{
-					Type:  ID,
-					Value: append([]byte("#"), pv.currentToken.Literal...),
-				})
-				pv.advance() // Consume the identifier
-			} else {
-				pv.addError("Expected identifier after '#'", pv.nextToken)
-				pv.advance() // Skip the hash
-			}
-		case tokens.LBRACKET:
-			attrSelector := pv.parseAttributeSelector()
-			if attrSelector != nil {
-				s.Selectors = append(s.Selectors, *attrSelector)
-			}
-		case tokens.COLON, tokens.DBLCOLON:
-			pseudoSelector := pv.parsePseudoSelector()
-			if pseudoSelector != nil {
-				s.Selectors = append(s.Selectors, *pseudoSelector)
-			}
-		case tokens.COMMA, tokens.GREATER, tokens.PLUS, tokens.TILDE:
-			s.Selectors = append(s.Selectors, SelectorValue{
-				Type:  Combinator,
-				Value: pv.currentToken.Literal,
-			})
+		case pv.isDeclarationStart():
+			declaration := pv.arena.newDeclaration()
+			declaration.Key = pv.currentLiteral()
+			visitDeclaration(pv, declaration)
+			rules = pv.arena.appendNode(rules, declaration)
+		case isSelectorStartToken(pv.currentToken.Type):
+			selector := pv.arena.newSelector()
+			visitSelector(pv, selector)
+			rules = pv.arena.appendNode(rules, selector)
+		case pv.currentTokenIs(tokens.SEMICOLON):
 			pv.advance()
 		default:
-			pv.addError("Unexpected token in selector", pv.currentToken)
-			pv.advance() // Skip unexpected token
+			pv.addError("Expected declaration, nested rule, at-rule, or comment", pv.currentToken)
+			pv.skipToNextSemicolonOrBrace()
 		}
+		pv.ensureProgress(mark, "rule block")
 	}
+	return rules
 }
 
-func (pv *ParseVisitor) parseAttributeSelector() *SelectorValue {
-	var attrBuilder strings.Builder
-	attrBuilder.WriteByte('[')
-
-	pv.advance() // Consume '['
-	for !pv.currentTokenIs(tokens.RBRACKET) && !pv.currentTokenIs(tokens.EOF) {
-		attrBuilder.Write(pv.currentToken.Literal)
-		pv.advance()
+func (pv *ParseVisitor) isDeclarationStart() bool {
+	if !pv.currentTokenIs(tokens.IDENT) || !pv.nextTokenIs(tokens.COLON) {
+		return false
 	}
-
-	if pv.currentTokenIs(tokens.RBRACKET) {
-		attrBuilder.WriteByte(']')
-		pv.advance() // Consume ']'
-		return &SelectorValue{
-			Type:  Attribute,
-			Value: []byte(attrBuilder.String()),
-		}
-	} else {
-		pv.addError("Expected closing bracket for attribute selector", pv.currentToken)
-		return nil
+	if isDashedIdent(pv.currentLiteral()) {
+		return true
 	}
-}
-
-func (pv *ParseVisitor) parsePseudoSelector() *SelectorValue {
-	pseudo := pv.currentToken.Literal
-	pv.advance() // Consume the colon(s)
-	if pv.currentTokenIs(tokens.IDENT) {
-		pseudo = append(pseudo, pv.currentToken.Literal...)
-		pv.advance()
-
-		// Check if it's a functional pseudo-class
-		if pv.currentTokenIs(tokens.LPAREN) {
-			pseudo = append(pseudo, pv.currentToken.Literal...)
-			pv.advance() // Consume '('
-
-			// Parse the contents of the pseudo-class
-			pseudoContents := pv.parsePseudoClassContents()
-			pseudo = append(pseudo, pseudoContents...)
-
-			if pv.currentTokenIs(tokens.RPAREN) {
-				pseudo = append(pseudo, pv.currentToken.Literal...)
-				pv.advance() // Consume ')'
-			} else {
-				pv.addError("Expected closing parenthesis for pseudo-class", pv.currentToken)
-			}
-		}
-
-		return &SelectorValue{
-			Type:  Pseudo,
-			Value: pseudo,
-		}
-	} else {
-		pv.addError("Expected identifier after pseudo-selector", pv.currentToken)
-		return nil
-	}
-}
-
-func (pv *ParseVisitor) parsePseudoClassContents() []byte {
-	var contents []byte
-	parenthesesCount := 1
-
-	for parenthesesCount > 0 && !pv.currentTokenIs(tokens.EOF) {
-		switch pv.currentToken.Type {
+	parenDepth, bracketDepth := 0, 0
+	for i := 2; ; i++ {
+		tok := pv.peekToken(i)
+		switch tok.Type {
 		case tokens.LPAREN:
-			parenthesesCount++
+			parenDepth++
 		case tokens.RPAREN:
-			parenthesesCount--
-			if parenthesesCount == 0 {
-				return contents
+			if parenDepth > 0 {
+				parenDepth--
 			}
 		case tokens.LBRACKET:
-			attributeSelector := pv.parseAttributeSelector()
-			if attributeSelector != nil {
-				contents = append(contents, attributeSelector.Value...)
+			bracketDepth++
+		case tokens.RBRACKET:
+			if bracketDepth > 0 {
+				bracketDepth--
 			}
+		case tokens.LBRACE:
+			if parenDepth == 0 && bracketDepth == 0 {
+				return false
+			}
+		case tokens.SEMICOLON, tokens.RBRACE, tokens.EOF:
+			if parenDepth == 0 && bracketDepth == 0 {
+				return true
+			}
+		}
+	}
+}
+
+func (pv *ParseVisitor) peekToken(offset int) tokens.Token {
+	switch offset {
+	case 0:
+		return *pv.currentToken
+	case 1:
+		return *pv.nextToken
+	default:
+		idx := pv.position + offset - 2
+		if idx >= 0 && idx < len(pv.tokens) {
+			return pv.tokens[idx]
+		}
+		return tokens.Token{Type: tokens.EOF}
+	}
+}
+
+func isSelectorStartToken(tokenType tokens.TokenType) bool {
+	switch tokenType {
+	case tokens.DOT, tokens.HASH, tokens.AMPERSAND, tokens.ASTERISK, tokens.LBRACKET, tokens.COLON, tokens.DBLCOLON, tokens.IDENT, tokens.GREATER, tokens.PLUS, tokens.TILDE, tokens.PIPE:
+		return true
+	default:
+		return false
+	}
+}
+
+func (pv *ParseVisitor) parseSelector(s *Selector) {
+	pv.parseSelectorUntil(s, tokens.LBRACE)
+}
+
+func (pv *ParseVisitor) parseSelectorUntil(s *Selector, stops ...tokens.TokenType) {
+	var prevLine, prevEndColumn uint32
+	hasPrevSimple := false
+	for !pv.currentTokenIs(tokens.EOF) && !tokenIn(pv.currentToken.Type, stops...) {
+		mark := pv.progressMark()
+		before := *pv.currentToken
+		var value SelectorValue
+		hasValue := false
+		combinator := false
+
+		switch pv.currentToken.Type {
+		case tokens.COMMENT:
+			comment := pv.arena.newComment()
+			comment.Text = pv.currentLiteral()
+			visitComment(pv, comment)
+			s.Rules = pv.arena.appendNode(s.Rules, comment)
+			continue
+		case tokens.IDENT:
+			if pv.nextTokenIs(tokens.PIPE) {
+				value, hasValue = pv.parseNamespaceSelector()
+			} else {
+				value = SelectorValue{Type: Element, Value: pv.currentLiteral()}
+				hasValue = true
+				pv.advance()
+			}
+		case tokens.ASTERISK:
+			if pv.nextTokenIs(tokens.PIPE) {
+				value, hasValue = pv.parseNamespaceSelector()
+			} else {
+				value = SelectorValue{Type: Universal, Value: pv.currentLiteral()}
+				hasValue = true
+				pv.advance()
+			}
+		case tokens.AMPERSAND:
+			value = SelectorValue{Type: Nesting, Value: pv.currentLiteral()}
+			hasValue = true
+			pv.advance()
+		case tokens.PIPE:
+			if pv.nextTokenIs(tokens.PIPE) {
+				start := int(pv.currentToken.Start)
+				pv.advance()
+				end := int(pv.currentToken.End)
+				lit := pv.source[start:end]
+				pv.advance()
+				value = SelectorValue{Type: Combinator, Value: lit}
+				hasValue = true
+				combinator = true
+			} else {
+				value, hasValue = pv.parseNamespaceSelector()
+			}
+		case tokens.DOT:
+			if pv.nextTokenIs(tokens.IDENT) || pv.nextTokenIs(tokens.NUMBER) {
+				pv.advance()
+				value = SelectorValue{Type: Class, Value: pv.currentLiteral()}
+				hasValue = true
+				pv.advance()
+			} else {
+				pv.addError("Expected identifier after '.'", pv.nextToken)
+				pv.advance()
+				continue
+			}
+		case tokens.HASH:
+			if pv.nextTokenIs(tokens.IDENT) || pv.nextTokenIs(tokens.NUMBER) {
+				pv.advance()
+				value = SelectorValue{Type: ID, Value: pv.currentLiteral()}
+				hasValue = true
+				pv.advance()
+			} else {
+				pv.addError("Expected identifier after '#'", pv.nextToken)
+				pv.advance()
+				continue
+			}
+		case tokens.LBRACKET:
+			value, hasValue = pv.parseAttributeSelector()
+		case tokens.COLON, tokens.DBLCOLON:
+			value, hasValue = pv.parsePseudoSelector()
+		case tokens.COMMA, tokens.GREATER, tokens.PLUS, tokens.TILDE:
+			value = SelectorValue{Type: Combinator, Value: pv.currentLiteral()}
+			hasValue = true
+			pv.advance()
+			combinator = true
+		default:
+			pv.addError("Unexpected token in selector", pv.currentToken)
+			pv.advance()
 			continue
 		}
 
-		contents = append(contents, pv.currentToken.Literal...)
+		if !hasValue {
+			continue
+		}
+		if !combinator && hasPrevSimple && (before.Line != prevLine || before.Column > prevEndColumn) {
+			s.Selectors = pv.arena.appendSelectorValue(s.Selectors, SelectorValue{Type: Combinator, Value: []byte(" ")})
+		}
+		s.Selectors = pv.arena.appendSelectorValue(s.Selectors, value)
+		if combinator {
+			hasPrevSimple = false
+		} else {
+			prevLine = before.Line
+			prevEndColumn = before.Column + selectorSourceLength(before, value)
+			hasPrevSimple = true
+		}
+		pv.ensureProgress(mark, "selector")
+	}
+}
+
+func selectorSourceLength(start tokens.Token, value SelectorValue) uint32 {
+	switch value.Type {
+	case Class, ID:
+		return uint32(len(value.Value) + 1)
+	default:
+		return uint32(len(value.Value))
+	}
+}
+
+func (pv *ParseVisitor) parseNamespaceSelector() (SelectorValue, bool) {
+	start := int(pv.currentToken.Start)
+	end := start
+	if pv.currentTokenIs(tokens.IDENT) || pv.currentTokenIs(tokens.ASTERISK) {
+		end = int(pv.currentToken.End)
 		pv.advance()
 	}
+	if !pv.currentTokenIs(tokens.PIPE) {
+		b := pv.source[start:end]
+		return SelectorValue{Type: Element, Value: b}, len(b) > 0
+	}
+	end = int(pv.currentToken.End)
+	pv.advance()
+	if pv.currentTokenIs(tokens.IDENT) || pv.currentTokenIs(tokens.ASTERISK) {
+		end = int(pv.currentToken.End)
+		pv.advance()
+	}
+	return SelectorValue{Type: NamespacePrefix, Value: pv.source[start:end]}, true
+}
 
-	return contents
+func (pv *ParseVisitor) parseAttributeSelector() (SelectorValue, bool) {
+	start := int(pv.currentToken.Start)
+
+	pv.advance()
+	bracketDepth := 1
+	for bracketDepth > 0 && !pv.currentTokenIs(tokens.EOF) {
+		mark := pv.progressMark()
+		if pv.currentTokenIs(tokens.LBRACKET) {
+			bracketDepth++
+		} else if pv.currentTokenIs(tokens.RBRACKET) {
+			bracketDepth--
+			if bracketDepth == 0 {
+				end := int(pv.currentToken.End)
+				pv.advance()
+				return SelectorValue{Type: Attribute, Value: pv.source[start:end]}, true
+			}
+		}
+		pv.advance()
+		pv.ensureProgress(mark, "attribute selector")
+	}
+
+	pv.addError("Expected closing bracket for attribute selector", pv.currentToken)
+	return SelectorValue{}, false
+}
+
+func (pv *ParseVisitor) parsePseudoSelector() (SelectorValue, bool) {
+	start := int(pv.currentToken.Start)
+	end := int(pv.currentToken.End)
+	pv.advance()
+	if pv.currentTokenIs(tokens.MINUS) {
+		end = int(pv.currentToken.End)
+		pv.advance()
+	}
+	if pv.currentTokenIs(tokens.IDENT) {
+		end = int(pv.currentToken.End)
+		pv.advance()
+		if pv.currentTokenIs(tokens.LPAREN) {
+			parenDepth := 0
+			for !pv.currentTokenIs(tokens.EOF) {
+				mark := pv.progressMark()
+				switch pv.currentToken.Type {
+				case tokens.LPAREN:
+					parenDepth++
+				case tokens.RPAREN:
+					parenDepth--
+				}
+				end = int(pv.currentToken.End)
+				pv.advance()
+				pv.ensureProgress(mark, "pseudo-class contents")
+				if parenDepth == 0 {
+					break
+				}
+			}
+			if parenDepth != 0 {
+				pv.addError("Expected closing parenthesis for pseudo-class", pv.currentToken)
+			}
+		}
+		return SelectorValue{Type: Pseudo, Value: pv.source[start:end]}, true
+	}
+	pv.addError("Expected identifier after pseudo-selector", pv.currentToken)
+	return SelectorValue{}, false
 }

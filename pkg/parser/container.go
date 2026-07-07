@@ -4,20 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aledsdavies/pristinecss/pkg/tokens"
+	"github.com/builtwithtofu/pristinecss/pkg/tokens"
 )
-
-const (
-	Container AtType = "container"
-)
-
-func init() {
-	RegisterAt(Container, visitContainerAtRule, func() AtRule { return &ContainerAtRule{} })
-}
 
 type ContainerAtRule struct {
-	Name        []byte
-	Query       ContainerQuery
+	Name         []byte
+	Query        ContainerQuery
 	Declarations []Node
 }
 
@@ -34,8 +26,8 @@ type ContainerFeature struct {
 	Value []byte
 }
 
-func (r *ContainerAtRule) Type() NodeType   { return NodeAtRule }
-func (r *ContainerAtRule) AtType() AtType   { return Container }
+func (r *ContainerAtRule) Type() NodeType { return NodeAtRule }
+func (r *ContainerAtRule) AtType() AtType { return AtContainer }
 func (r *ContainerAtRule) String() string {
 	var sb strings.Builder
 	sb.WriteString("ContainerAtRule{\n")
@@ -91,7 +83,7 @@ func visitContainerAtRule(pv *ParseVisitor, node AtRule) {
 
 	// Parse optional container name
 	if pv.currentTokenIs(tokens.IDENT) {
-		c.Name = pv.currentToken.Literal
+		c.Name = pv.currentLiteral()
 		pv.advance()
 	}
 
@@ -102,74 +94,50 @@ func visitContainerAtRule(pv *ParseVisitor, node AtRule) {
 		return
 	}
 
-	// Parse declarations
-	for !pv.currentTokenIs(tokens.RBRACE) && !pv.currentTokenIs(tokens.EOF) {
-		switch pv.currentToken.Type {
-		case tokens.IDENT:
-			declaration := &Declaration{
-				Key: pv.currentToken.Literal,
-			}
-			visitDeclaration(pv, declaration)
-			c.Declarations = append(c.Declarations, declaration)
-		case tokens.DOT, tokens.HASH, tokens.COLON, tokens.DBLCOLON:
-			selector := &Selector{
-				Selectors: make([]SelectorValue, 0),
-				Rules:     make([]Node, 0),
-			}
-			visitSelector(pv, selector)
-			c.Declarations = append(c.Declarations, selector)
-		default:
-			pv.addError("Unexpected token in @container rule", pv.currentToken)
-			pv.advance()
-		}
-
-		if pv.currentTokenIs(tokens.SEMICOLON) {
-			pv.advance()
-		}
-	}
+	c.Declarations = pv.parseRuleBlock(true)
 
 	pv.consume(tokens.RBRACE, "Expected '}' to close @container rule")
 }
 
 func parseContainerQuery(pv *ParseVisitor) *ContainerQuery {
-	query := &ContainerQuery{
-		Conditions: make([]ContainerCondition, 0),
-	}
+	query := &ContainerQuery{}
 
 	for !pv.currentTokenIs(tokens.LBRACE) && !pv.currentTokenIs(tokens.EOF) {
+		mark := pv.progressMark()
 		condition := parseContainerCondition(pv)
 		if condition != nil {
 			query.Conditions = append(query.Conditions, *condition)
 		}
 
-		if pv.currentTokenIs(tokens.IDENT) && string(pv.currentToken.Literal) == "and" {
+		if pv.currentTokenIs(tokens.IDENT) && string(pv.currentLiteral()) == "and" {
 			pv.advance() // Consume 'and'
 		} else {
 			break
 		}
+		pv.ensureProgress(mark, "container query")
 	}
 
 	return query
 }
 
 func parseContainerCondition(pv *ParseVisitor) *ContainerCondition {
-	condition := &ContainerCondition{
-		Features: make([]ContainerFeature, 0),
-	}
+	condition := &ContainerCondition{}
 
 	if !pv.consume(tokens.LPAREN, "Expected '(' for container condition") {
 		return nil
 	}
 
 	for !pv.currentTokenIs(tokens.RPAREN) && !pv.currentTokenIs(tokens.EOF) {
+		mark := pv.progressMark()
 		feature := parseContainerFeature(pv)
 		if feature != nil {
 			condition.Features = append(condition.Features, *feature)
 		}
 
-		if pv.currentTokenIs(tokens.IDENT) && string(pv.currentToken.Literal) == "and" {
+		if pv.currentTokenIs(tokens.IDENT) && string(pv.currentLiteral()) == "and" {
 			pv.advance() // Consume 'and'
 		}
+		pv.ensureProgress(mark, "container condition")
 	}
 
 	if !pv.consume(tokens.RPAREN, "Expected ')' to close container condition") {
@@ -183,30 +151,36 @@ func parseContainerFeature(pv *ParseVisitor) *ContainerFeature {
 	feature := &ContainerFeature{}
 
 	if !pv.currentTokenIs(tokens.IDENT) {
-		pv.addError("Expected identifier for container feature", pv.currentToken)
-		return nil
+		feature.Name = pv.captureContainerFeatureValue()
+		return feature
 	}
 
-	feature.Name = pv.currentToken.Literal
+	feature.Name = pv.currentLiteral()
 	pv.advance()
 
-	if !pv.consume(tokens.COLON, "Expected ':' after container feature name") {
-		return nil
-	}
-
-	if pv.currentTokenIs(tokens.IDENT) || pv.currentTokenIs(tokens.NUMBER) {
-		feature.Value = pv.currentToken.Literal
+	if pv.currentTokenIs(tokens.COLON) {
 		pv.advance()
-
-		// Handle units like 'px'
-		if pv.currentTokenIs(tokens.IDENT) {
-			feature.Value = append(feature.Value, pv.currentToken.Literal...)
-			pv.advance()
-		}
-	} else {
-		pv.addError("Expected value for container feature", pv.currentToken)
-		return nil
+		feature.Value = pv.captureContainerFeatureValue()
+	} else if !pv.currentTokenIs(tokens.RPAREN) {
+		feature.Name = append(feature.Name, pv.captureContainerFeatureValue()...)
 	}
 
 	return feature
+}
+
+func (pv *ParseVisitor) captureContainerFeatureValue() []byte {
+	start, end := -1, -1
+	for !pv.currentTokenIs(tokens.RPAREN) && !pv.currentTokenIs(tokens.EOF) {
+		mark := pv.progressMark()
+		if pv.currentTokenIs(tokens.IDENT) && string(pv.currentLiteral()) == "and" {
+			break
+		}
+		if start < 0 {
+			start = int(pv.currentToken.Start)
+		}
+		end = int(pv.currentToken.End)
+		pv.advance()
+		pv.ensureProgress(mark, "container feature value")
+	}
+	return pv.sourceSpan(start, end)
 }

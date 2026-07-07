@@ -4,20 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aledsdavies/pristinecss/pkg/tokens"
+	"github.com/builtwithtofu/pristinecss/pkg/tokens"
 )
-
-const (
-	NodeKeyframeStop NodeType = "KeyframeStop"
-	Keyframe         AtType   = "keyframes"
-	WebkitKeyframe   AtType   = "-webkit-keyframes"
-)
-
-func init() {
-	RegisterAt(Keyframe, visitKeyframesAtRule, func() AtRule { return &KeyframesAtRule{} })
-	RegisterAt(WebkitKeyframe, visitKeyframesAtRule, func() AtRule { return &KeyframesAtRule{WebKitPrefix: true} })
-	RegisterNodeType(NodeKeyframeStop, visitKeyframeStop)
-}
 
 var _ Node = (*KeyframesAtRule)(nil)
 
@@ -28,7 +16,7 @@ type KeyframesAtRule struct {
 }
 
 func (k *KeyframesAtRule) Type() NodeType { return NodeAtRule }
-func (k *KeyframesAtRule) AtType() AtType { return Keyframe }
+func (k *KeyframesAtRule) AtType() AtType { return AtKeyframes }
 func (k *KeyframesAtRule) String() string {
 	var sb strings.Builder
 	sb.WriteString("KeyframesAtRule{\n")
@@ -78,7 +66,7 @@ func visitKeyframesAtRule(pv *ParseVisitor, node AtRule) {
 		return
 	}
 
-	k.Name = pv.currentToken.Literal
+	k.Name = pv.currentLiteral()
 	pv.advance()
 
 	if !pv.consume(tokens.LBRACE, "Expected '{' after @keyframes name") {
@@ -86,11 +74,16 @@ func visitKeyframesAtRule(pv *ParseVisitor, node AtRule) {
 	}
 
 	for !pv.currentTokenIs(tokens.RBRACE) && !pv.currentTokenIs(tokens.EOF) {
-		stop := &KeyframeStop{
-			Rules: make([]Node, 0),
+		mark := pv.progressMark()
+		if pv.currentTokenIs(tokens.COMMENT) {
+			pv.advance()
+			pv.ensureProgress(mark, "keyframes block")
+			continue
 		}
+		stop := pv.arena.newKeyframeStop()
 		visitKeyframeStop(pv, stop)
 		k.Stops = append(k.Stops, *stop)
+		pv.ensureProgress(mark, "keyframes block")
 	}
 
 	pv.consume(tokens.RBRACE, "Expected '}' to close @keyframes block")
@@ -99,6 +92,7 @@ func visitKeyframesAtRule(pv *ParseVisitor, node AtRule) {
 func visitKeyframeStop(pv *ParseVisitor, node Node) {
 	ks := node.(*KeyframeStop)
 	for !pv.currentTokenIs(tokens.LBRACE) && !pv.currentTokenIs(tokens.EOF) {
+		mark := pv.progressMark()
 		switch pv.currentToken.Type {
 		case tokens.IDENT, tokens.NUMBER:
 			ks.Stops = append(ks.Stops, pv.parseValue())
@@ -110,6 +104,7 @@ func visitKeyframeStop(pv *ParseVisitor, node Node) {
 			pv.skipToNextSemicolonOrBrace()
 			return
 		}
+		pv.ensureProgress(mark, "keyframe selector")
 	}
 
 	if !pv.consume(tokens.LBRACE, "Expected '{' after keyframe selector") {
@@ -117,20 +112,21 @@ func visitKeyframeStop(pv *ParseVisitor, node Node) {
 	}
 
 	for !pv.currentTokenIs(tokens.RBRACE) && !pv.currentTokenIs(tokens.EOF) {
+		mark := pv.progressMark()
 		if !pv.currentTokenIs(tokens.IDENT) {
 			pv.addError("Expected property name", pv.currentToken)
 			pv.skipToNextSemicolonOrBrace()
 			continue
 		}
-		declaration := &Declaration{
-			Key: pv.currentToken.Literal,
-		}
+		declaration := pv.arena.newDeclaration()
+		declaration.Key = pv.currentLiteral()
 		visitDeclaration(pv, declaration)
-		ks.Rules = append(ks.Rules, declaration)
+		ks.Rules = pv.arena.appendNode(ks.Rules, declaration)
 
 		if pv.currentTokenIs(tokens.SEMICOLON) {
 			pv.advance() // Consume ';'
 		}
+		pv.ensureProgress(mark, "keyframe block")
 	}
 
 	pv.consume(tokens.RBRACE, "Expected '}' at the end of keyframe block")

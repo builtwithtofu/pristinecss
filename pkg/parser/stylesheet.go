@@ -3,17 +3,8 @@ package parser
 import (
 	"strings"
 
-	"github.com/aledsdavies/pristinecss/pkg/tokens"
+	"github.com/builtwithtofu/pristinecss/pkg/tokens"
 )
-
-
-const (
-	NodeStylesheet NodeType = "stylesheet"
-)
-
-func init() {
-	RegisterNodeType(NodeStylesheet, visitStylesheet)
-}
 
 var _ Node = (*Stylesheet)(nil)
 
@@ -22,7 +13,7 @@ type Stylesheet struct {
 }
 
 func NewStylesheet() *Stylesheet {
-	return &Stylesheet{Rules: []Node{}}
+	return &Stylesheet{}
 }
 
 func (s *Stylesheet) Type() NodeType { return NodeStylesheet }
@@ -47,25 +38,23 @@ func visitStylesheet(pv *ParseVisitor, node Node) {
 		var childNode Node
 		switch pv.currentToken.Type {
 		case tokens.COMMENT:
-			childNode = &Comment{Text: pv.currentToken.Literal}
+			comment := pv.arena.newComment()
+			comment.Text = pv.currentLiteral()
+			childNode = comment
 			visitComment(pv, childNode)
-		case tokens.DOT, tokens.HASH, tokens.COLON, tokens.DBLCOLON, tokens.IDENT, tokens.LBRACKET:
-			childNode = &Selector{
-				Selectors: make([]SelectorValue, 0),
-				Rules:     make([]Node, 0),
-			}
-			visitSelector(pv, childNode)
 		case tokens.AT:
-			childNode = pv.getAtRule()
-			visitAt(pv, childNode)
+			childNode = parseAtRule(pv)
+		case tokens.DOT, tokens.HASH, tokens.COLON, tokens.DBLCOLON, tokens.IDENT, tokens.LBRACKET, tokens.ASTERISK, tokens.AMPERSAND, tokens.PIPE:
+			childNode = pv.arena.newSelector()
+			visitSelector(pv, childNode)
 		default:
 			pv.addError("Unexpected token at stylesheet level", pv.currentToken)
 			pv.advance()
 			continue
 		}
 
-		if node != nil {
-			s.Rules = append(s.Rules, childNode)
+		if childNode != nil {
+			s.Rules = pv.arena.appendNode(s.Rules, childNode)
 		}
 	}
 }

@@ -2,7 +2,6 @@ package parser
 
 import "testing"
 
-
 func TestKeyframes(t *testing.T) {
 	tests := []struct {
 		name     string

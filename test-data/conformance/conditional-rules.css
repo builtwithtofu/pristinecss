@@ -1,0 +1,15 @@
+/* supports declaration */
+@supports (display: grid) { .grid { display: grid; } }
+/* supports not */
+@supports not (display: grid) { .fallback { display: block; } }
+/* supports and or */
+@supports ((display: grid) and (color: oklch(.7 .2 20))) { .modern { color: green; } }
+@supports ((display: grid) or (display: flex)) { .layout { display: flex; } }
+/* supports selector */
+@supports selector(:has(> img)) { figure:has(> img) { display: block; } }
+/* media range */
+@media (width >= 40rem) { .wide { color: red; } }
+@media (400px <= width <= 700px) { .range { color: blue; } }
+/* container range */
+@container card (inline-size > 30rem) { .card { color: red; } }
+@container (20rem <= width <= 60rem) { .card { color: blue; } }
