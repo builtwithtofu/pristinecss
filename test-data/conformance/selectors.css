@@ -1,0 +1,21 @@
+/* universal */
+* { box-sizing: border-box; }
+*.highlight { color: red; }
+/* type class id */
+main.content#app { display: block; }
+/* combinators */
+article p > a + img ~ span || em { color: blue; }
+/* namespace */
+svg|rect, *|circle, |title { fill: currentColor; }
+/* attributes */
+a[href="x"], a[rel~="tag"], a[lang|="en"], a[href^="https"], a[href$=".org" i], a[href*="example" s] { color: green; }
+/* nesting selector at top level fallback */
+& .nested-entry { color: purple; }
+/* pseudo classes */
+a:is(h1, h2):where(.x):not(.y):has(> img):nth-child(2n+1 of .item):dir(ltr):lang(en):popover-open:user-valid { color: black; }
+/* host state */
+:host(.ready):state(open) { display: block; }
+/* pseudo elements */
+button::part(tab)::before, slot::slotted(img), ::highlight(search), ::view-transition-group(root), ::view-transition-old(root), ::view-transition-new(root), details::details-content, ::backdrop, ::marker, input::file-selector-button, input::placeholder, p:first-line, p:first-letter, p:before, p:after { color: currentColor; }
+/* vendor pseudo */
+button:-moz-focusring { outline: 1px dotted; }

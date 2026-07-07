@@ -1,0 +1,18 @@
+/* math */
+.math { width: calc(100% - 2px); min-width: min(10px, 1em); max-width: max(10px, 1em); height: clamp(1rem, 2vw, 3rem); opacity: round(nearest, .5, .1); transform: translateX(sign(-1px)); }
+/* advanced math */
+.trig { rotate: atan2(1, 1); scale: sqrt(4) pow(2, 3); top: mod(10px, 3px); left: rem(10px, 3px); }
+/* colors */
+.colors { color: rgb(0 0 0 / 50%); background: hsl(0 0% 100%); border-color: hwb(0 0% 0%); outline-color: lab(50% 0 0); text-decoration-color: lch(50% 20 30); accent-color: oklab(.5 0 0); caret-color: oklch(.7 .2 20); box-shadow: 0 0 0 1px color(display-p3 1 0 0); }
+/* color functions */
+.mix { color: color-mix(in oklch, red 30%, blue); background: light-dark(white, black); }
+/* gradients images */
+.images { background: linear-gradient(red, blue), radial-gradient(circle, red, blue), conic-gradient(red, blue), repeating-linear-gradient(red 0 10px, blue 10px 20px); list-style-image: image-set(url(a.png) 1x, url(a@2x.png) 2x); mask-image: cross-fade(url(a.png), url(b.png)); }
+/* shapes */
+.shapes { clip-path: circle(50%) ellipse(50% 40%) polygon(0 0, 100% 0, 0 100%) inset(1px) xywh(0 0 10px 10px) rect(0 10px 10px 0) path("M0 0L1 1") shape(from 0 0, line to 1px 1px); offset-path: ray(45deg); }
+/* transforms filters easing counters */
+.fx { transform: translate(1px) rotate(1turn) scale(1) skew(1deg) matrix(1,0,0,1,0,0) matrix3d(1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1) perspective(10px); filter: blur(1px) brightness(1) contrast(1) drop-shadow(0 0 1px red); transition-timing-function: cubic-bezier(.1,.2,.3,.4), steps(2), linear(0, .5, 1); content: counter(item) counters(item, ".") symbols(cyclic "*"); }
+/* var env attr url */
+.vars { margin: var(--gap, 1rem); padding: env(safe-area-inset-top); content: attr(data-label); background-image: url(unquoted.svg); }
+/* keywords */
+.keywords { color: initial; border-color: inherit; outline-color: unset; text-decoration-color: revert; accent-color: revert-layer; }

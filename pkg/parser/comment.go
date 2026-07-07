@@ -2,29 +2,20 @@ package parser
 
 import "fmt"
 
-const (
-	NodeComment NodeType = "Comment"
-)
-
-func init() {
-	RegisterNodeType(NodeComment, visitComment)
-}
-
 var _ Node = (*Comment)(nil)
 
-
 type Comment struct {
-    Text []byte
+	Text []byte
 }
 
-func (c *Comment) Type() NodeType { return NodeComment }
+func (c *Comment) Type() NodeType       { return NodeComment }
 func (c *Comment) ValueType() ValueType { return ValueComment }
 func (c *Comment) String() string {
-    return fmt.Sprintf("Comment{Text: %q}", string(c.Text))
+	return fmt.Sprintf("Comment{Text: %q}", string(c.Text))
 }
 
 func visitComment(pv *ParseVisitor, node Node) {
-    // The comment's text has already been set when the node was created,
-    // so we just need to advance past the comment token.
-    pv.advance()
+	// The comment's text has already been set when the node was created,
+	// so we just need to advance past the comment token.
+	pv.advance()
 }

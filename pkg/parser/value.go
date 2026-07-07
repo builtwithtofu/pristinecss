@@ -4,40 +4,21 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aledsdavies/pristinecss/pkg/tokens"
+	"github.com/builtwithtofu/pristinecss/pkg/tokens"
 )
-
-const (
-	NodeValue NodeType = "Value"
-)
-
-func init() {
-	RegisterNodeType(NodeValue, func(pv *ParseVisitor, node Node) {
-		switch v := node.(type) {
-		case *BasicValue:
-			visitBasicValue(pv, v)
-		case *StringValue:
-			visitStringValue(pv, v)
-		case *FunctionValue:
-			visitFunctionValue(pv, v)
-		default:
-			pv.addError(fmt.Sprintf("Unknown value type: %T", v), pv.currentToken)
-		}
-	})
-}
 
 type ValueType int
 
 const (
-    Basic ValueType = iota
-    String
-    Function
-    ValueComment
+	Basic ValueType = iota
+	String
+	Function
+	ValueComment
 )
 
 type Value interface {
-    Node
-    ValueType() ValueType
+	Node
+	ValueType() ValueType
 }
 
 var _ Value = (*BasicValue)(nil)
@@ -65,8 +46,6 @@ func (bv *StringValue) String() string {
 	return fmt.Sprintf("StringValue{SingleQuote: %v, Value: %q}", bv.SingleQuote, string(bv.Value))
 }
 
-var _ Value = (*FunctionValue)(nil)
-
 type FunctionValue struct {
 	Name      []byte
 	Arguments []Value
@@ -87,95 +66,137 @@ func (fv *FunctionValue) String() string {
 	return sb.String()
 }
 
-func visitBasicValue(pv *ParseVisitor, node Node) {
-	bv := node.(*BasicValue)
-	bv.Value = pv.currentToken.Literal
-	pv.advance()
+func (pv *ParseVisitor) parseValue() Value {
+	switch pv.currentToken.Type {
+	case tokens.NUMBER:
+		return pv.parseNumberValue()
+	case tokens.IDENT:
+		if pv.isUnicodeRangeStart(*pv.currentToken, *pv.nextToken) {
+			return pv.parseUnicodeRangeValue()
+		}
+		if pv.nextTokenIs(tokens.LPAREN) {
+			fv := pv.arena.newFunctionValue()
+			visitFunctionValue(pv, fv)
+			return fv
+		}
+		bv := pv.arena.newBasicValue()
+		bv.Value = pv.currentLiteral()
+		pv.advance()
+		return bv
+	case tokens.URI:
+		value := pv.parseURLValue()
+		pv.advance()
+		return value
+	case tokens.STRING:
+		sv := pv.arena.newStringValue()
+		visitStringValue(pv, sv)
+		return sv
+	default:
+		bv := pv.arena.newBasicValue()
+		bv.Value = pv.currentLiteral()
+		pv.advance()
+		return bv
+	}
 }
 
 func visitStringValue(pv *ParseVisitor, node Node) {
 	sv := node.(*StringValue)
-	str := pv.currentToken.Literal
-	sv.SingleQuote = str[0] == '\''
-	sv.Value = str[1 : len(str)-1] // Remove the quotes
+	str := pv.currentLiteral()
+	if len(str) >= 2 {
+		sv.SingleQuote = str[0] == '\''
+		sv.Value = str[1 : len(str)-1]
+	}
 	pv.advance()
 }
 
 func visitFunctionValue(pv *ParseVisitor, node Node) {
 	fv := node.(*FunctionValue)
-	fv.Name = pv.currentToken.Literal
-	pv.advance() // Move to '('
-	pv.advance() // Move past '('
-
+	fv.Name = pv.currentLiteral()
+	pv.advance()
+	pv.advance()
 	for !pv.currentTokenIs(tokens.RPAREN) && !pv.currentTokenIs(tokens.EOF) {
-		fv.Arguments = append(fv.Arguments, pv.parseValue())
+		mark := pv.progressMark()
 		if pv.currentTokenIs(tokens.COMMA) {
 			pv.advance()
+			pv.ensureProgress(mark, "function arguments")
+			continue
 		}
+		fv.Arguments = pv.arena.appendValue(fv.Arguments, pv.parseValue())
+		pv.ensureProgress(mark, "function arguments")
 	}
-
 	pv.consume(tokens.RPAREN, "Expected ')' to close function")
 }
 
-func (pv *ParseVisitor) parseValue() Value {
-	var value Value
-	switch pv.currentToken.Type {
-	case tokens.NUMBER:
-		return pv.parseNumberValue()
-	case tokens.IDENT:
-		if pv.nextTokenIs(tokens.LPAREN) {
-			value = &FunctionValue{}
-		} else {
-			value = &BasicValue{}
+func (pv *ParseVisitor) parseNumberValue() Value {
+	numberToken := *pv.currentToken
+	number := pv.currentLiteral()
+	pv.advance()
+	if (pv.currentTokenIs(tokens.PERCENTAGE) || isUnit(pv.currentLiteral())) && adjacentToken(numberToken, *pv.currentToken) {
+		end := int(pv.currentToken.End)
+		start := int(numberToken.Start)
+		if start <= end && end <= len(pv.source) {
+			number = pv.source[start:end]
 		}
-	case tokens.URI:
-		value = pv.parseURLValue()
 		pv.advance()
-		return value
-	case tokens.STRING:
-		value = &StringValue{}
-	default:
-		value = &BasicValue{}
 	}
-
-	handler := GetNodeHandler(value)
-	handler(pv, value)
-
-	return value
+	bv := pv.arena.newBasicValue()
+	bv.Value = number
+	return bv
 }
 
-func (pv *ParseVisitor) parseNumberValue() Value {
-	number := pv.currentToken.Literal
-	pv.advance()
-	if pv.currentTokenIs(tokens.PERCENTAGE) || isUnit(pv.currentToken.Literal) {
-		number = append(number, pv.currentToken.Literal...)
-		pv.advance()
+func (pv *ParseVisitor) isUnicodeRangeStart(curr, next tokens.Token) bool {
+	lit := curr.Literal(pv.source)
+	if len(lit) != 1 || (lit[0] != 'U' && lit[0] != 'u') {
+		return false
 	}
-	return &BasicValue{Value: number}
+	return next.Type == tokens.PLUS
+}
+
+func (pv *ParseVisitor) parseUnicodeRangeValue() Value {
+	value := make([]byte, 0, 16)
+	start := *pv.currentToken
+	value = append(value, pv.currentLiteral()...)
+	pv.advance()
+	for !pv.currentTokenIs(tokens.SEMICOLON) && !pv.currentTokenIs(tokens.COMMA) && !pv.currentTokenIs(tokens.RBRACE) && !pv.currentTokenIs(tokens.EOF) {
+		mark := pv.progressMark()
+		if len(value) > 0 && !adjacentToken(start, *pv.currentToken) && !pv.currentTokenIs(tokens.MINUS) {
+			break
+		}
+		value = append(value, pv.currentLiteral()...)
+		start = *pv.currentToken
+		pv.advance()
+		pv.ensureProgress(mark, "unicode-range value")
+	}
+	bv := pv.arena.newBasicValue()
+	bv.Value = value
+	return bv
+}
+
+func adjacentToken(prev, curr tokens.Token) bool {
+	return prev.Line == curr.Line && curr.Column <= prev.Column+(prev.End-prev.Start)
 }
 
 func (pv *ParseVisitor) parseURLValue() Value {
-	urlContent, singleQuote, quoteless := extractURLContent(pv.currentToken.Literal)
-
+	urlContent, singleQuote, quoteless := extractURLContent(pv.currentLiteral())
 	var arg Value
 	if quoteless {
-		arg = &BasicValue{Value: urlContent}
+		bv := pv.arena.newBasicValue()
+		bv.Value = urlContent
+		arg = bv
 	} else {
-		arg = &StringValue{SingleQuote: singleQuote, Value: urlContent}
+		sv := pv.arena.newStringValue()
+		sv.SingleQuote = singleQuote
+		sv.Value = urlContent
+		arg = sv
 	}
-
-	return &FunctionValue{
-		Name:      []byte("url"),
-		Arguments: []Value{arg},
-	}
+	fv := pv.arena.newFunctionValue()
+	fv.Name = []byte("url")
+	fv.Arguments = pv.arena.appendValue(fv.Arguments, arg)
+	return fv
 }
 
-// Helper function to extract the contents of the url() function
 func extractURLContent(uri []byte) ([]byte, bool, bool) {
-	// Remove "url(" from the beginning and ")" from the end
 	content := uri[4 : len(uri)-1]
-
-	// Check if the content is quoted
 	singleQuote := false
 	quotless := false
 	if len(content) >= 2 {
@@ -188,6 +209,5 @@ func extractURLContent(uri []byte) ([]byte, bool, bool) {
 			quotless = true
 		}
 	}
-
 	return content, singleQuote, quotless
 }

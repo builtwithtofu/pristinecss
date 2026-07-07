@@ -1,4 +1,4 @@
-module github.com/aledsdavies/pristinecss
+module github.com/builtwithtofu/pristinecss
 
 go 1.22.3
 

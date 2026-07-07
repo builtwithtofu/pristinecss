@@ -2,17 +2,10 @@ package parser
 
 import (
 	"fmt"
-	"github.com/aledsdavies/pristinecss/pkg/tokens"
 	"strings"
-)
 
-const (
-	NodeDeclaration NodeType = "Declaration"
+	"github.com/builtwithtofu/pristinecss/pkg/tokens"
 )
-
-func init() {
-	RegisterNodeType(NodeDeclaration, visitDeclaration)
-}
 
 var _ Node = (*Declaration)(nil)
 
@@ -20,6 +13,7 @@ type Declaration struct {
 	Key       []byte
 	Value     []Value
 	Important bool
+	Custom    bool
 }
 
 func (d *Declaration) Type() NodeType { return NodeDeclaration }
@@ -34,46 +28,102 @@ func (d *Declaration) String() string {
 	}
 	sb.WriteString("  ]\n")
 	sb.WriteString(fmt.Sprintf("  Important: %v\n", d.Important))
+	if d.Custom {
+		sb.WriteString("  Custom: true\n")
+	}
 	sb.WriteString("}")
 	return sb.String()
 }
 
 func visitDeclaration(pv *ParseVisitor, node Node) {
 	d := node.(*Declaration)
-	pv.advance() // Consume property name
+	d.Custom = isCustomProperty(d.Key)
+	pv.advance()
 	if !pv.consume(tokens.COLON, "Expected ':' after property name") {
 		pv.skipToNextSemicolonOrBrace()
 		return
 	}
+	if d.Custom {
+		value := pv.arena.newBasicValue()
+		value.Value = pv.captureCustomPropertyValue()
+		d.Value = pv.arena.appendValue(d.Value, value)
+		if pv.currentTokenIs(tokens.SEMICOLON) {
+			pv.advance()
+		}
+		return
+	}
 	for !pv.currentTokenIs(tokens.SEMICOLON) && !pv.currentTokenIs(tokens.RBRACE) && !pv.currentTokenIs(tokens.EOF) {
+		mark := pv.progressMark()
 		switch pv.currentToken.Type {
 		case tokens.COMMENT:
-			comment := &Comment{Text: pv.currentToken.Literal}
+			comment := pv.arena.newComment()
+			comment.Text = pv.currentLiteral()
 			visitComment(pv, comment)
-			d.Value = append(d.Value, comment)
-		case tokens.IDENT, tokens.HASH, tokens.URI, tokens.STRING, tokens.NUMBER, tokens.COLOR:
-			d.Value = append(d.Value, pv.parseValue())
+			d.Value = pv.arena.appendValue(d.Value, comment)
 		case tokens.EXCLAMATION:
-			if pv.nextTokenIs(tokens.IDENT) && string(pv.nextToken.Literal) == "important" {
+			if pv.nextTokenIs(tokens.IDENT) && string(pv.nextLiteral()) == "important" {
 				d.Important = true
-				pv.advance() // Consume '!'
-				pv.advance() // Consume 'important'
+				pv.advance()
+				pv.advance()
 			} else {
-				pv.addError("Unexpected '!' in declaration value", pv.currentToken)
-				pv.skipToNextSemicolonOrBrace()
-				return
+				d.Value = pv.arena.appendValue(d.Value, pv.parseValue())
 			}
 		case tokens.COMMA:
-			// Skip the comma and continue parsing values
 			pv.advance()
 		default:
-			pv.addError("Unexpected token in declaration value", pv.currentToken)
-			pv.skipToNextSemicolonOrBrace()
-			return
+			d.Value = pv.arena.appendValue(d.Value, pv.parseValue())
 		}
+		pv.ensureProgress(mark, "declaration value")
 	}
-	// Consume the semicolon if present
 	if pv.currentTokenIs(tokens.SEMICOLON) {
 		pv.advance()
 	}
+}
+
+func isCustomProperty(key []byte) bool {
+	return isDashedIdent(key)
+}
+
+func (pv *ParseVisitor) captureCustomPropertyValue() []byte {
+	parenDepth, braceDepth, bracketDepth := 0, 0, 0
+	start, end := -1, -1
+	for !pv.currentTokenIs(tokens.EOF) {
+		mark := pv.progressMark()
+		if parenDepth == 0 && braceDepth == 0 && bracketDepth == 0 && (pv.currentTokenIs(tokens.SEMICOLON) || pv.currentTokenIs(tokens.RBRACE)) {
+			break
+		}
+		if start < 0 {
+			start = int(pv.currentToken.Start)
+		}
+		end = int(pv.currentToken.End)
+		switch pv.currentToken.Type {
+		case tokens.LPAREN:
+			parenDepth++
+		case tokens.RPAREN:
+			if parenDepth > 0 {
+				parenDepth--
+			}
+		case tokens.LBRACE:
+			braceDepth++
+		case tokens.RBRACE:
+			if braceDepth > 0 {
+				braceDepth--
+			}
+		case tokens.LBRACKET:
+			bracketDepth++
+		case tokens.RBRACKET:
+			if bracketDepth > 0 {
+				bracketDepth--
+			}
+		}
+		pv.advance()
+		pv.ensureProgress(mark, "custom property value")
+	}
+	if start < 0 || end < start || start > len(pv.source) {
+		return nil
+	}
+	if end > len(pv.source) {
+		end = len(pv.source)
+	}
+	return pv.source[start:end]
 }

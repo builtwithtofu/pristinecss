@@ -1,4 +1,3 @@
-
 package parser
 
 import "testing"
@@ -97,3 +96,17 @@ func TestMediaQueries(t *testing.T) {
 	runTests(t, tests)
 }
 
+func TestMediaRangeSyntax(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{name: "single comparison", input: `@media (inline-size > 30rem) { .x { color: red; } }`},
+		{name: "double comparison", input: `@media (400px <= width <= 700px) { .x { color: red; } }`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parseNoErrors(t, tt.input)
+		})
+	}
+}
