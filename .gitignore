@@ -1,4 +1,5 @@
 build/
+.ari/
 
 ### GO
 # If you prefer the allow list template instead of the deny list, see community template:
@@ -26,3 +27,6 @@ go.work.sum
 
 # env file
 .env
+
+# IDE
+.idea/
