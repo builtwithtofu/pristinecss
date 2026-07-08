@@ -146,6 +146,20 @@ func TestSelectorCompatibility(t *testing.T) {
 	}
 }
 
+func TestSelectorValuesPreserveClassAndIDPrefixes(t *testing.T) {
+	ss := parseNoErrors(t, `.button, #hero { color: red; }`)
+	selectors := ss.Rules[0].(*Selector).Selectors
+	want := []string{".button", ",", "#hero"}
+	if len(selectors) != len(want) {
+		t.Fatalf("selectors = %d, want %d: %#v", len(selectors), len(want), selectors)
+	}
+	for i, want := range want {
+		if got := string(selectors[i].Value); got != want {
+			t.Fatalf("selector %d = %q, want %q", i, got, want)
+		}
+	}
+}
+
 func TestMDNPseudoSelectorNames(t *testing.T) {
 	cases := []string{
 		":active", ":any-link", ":autofill", ":blank", ":checked", ":current", ":default", ":defined", ":dir(rtl)", ":disabled", ":empty", ":enabled", ":first", ":first-child", ":first-of-type", ":fullscreen", ":future", ":focus", ":focus-visible", ":focus-within", ":has(> img)", ":host", ":host(.card)", ":host-context(.theme)", ":hover", ":indeterminate", ":in-range", ":invalid", ":is(h1, h2)", ":lang(en)", ":last-child", ":last-of-type", ":left", ":link", ":local-link", ":modal", ":muting", ":not(.disabled)", ":nth-child(2n+1 of .x)", ":nth-col(2n+1)", ":nth-last-child(odd)", ":nth-last-col(even)", ":nth-last-of-type(2)", ":nth-of-type(3n)", ":only-child", ":only-of-type", ":optional", ":out-of-range", ":past", ":paused", ":picture-in-picture", ":placeholder-shown", ":playing", ":popover-open", ":read-only", ":read-write", ":required", ":right", ":root", ":scope", ":seeking", ":state(checked)", ":target", ":target-current", ":target-within", ":user-invalid", ":user-valid", ":valid", ":visited", ":where(.x)",
@@ -266,13 +280,22 @@ func TestUnitTable(t *testing.T) {
 }
 
 func TestCustomPropertyRawRoundTrip(t *testing.T) {
-	ss := parseNoErrors(t, `:root { --shadow: 1px   solid rgba(0, 0, 0, .5); --tokens: { a:   b }; }`)
+	ss := parseNoErrors(t, `:root { --shadow: 1px   solid rgba(0, 0, 0, .5); --tokens: { a:   b }; --sentinel: -->; --leading: --> b; --trailing: a -->; }`)
 	rules := ss.Rules[0].(*Selector).Rules
 	if got := string(rules[0].(*Declaration).Value[0].(*BasicValue).Value); got != "1px   solid rgba(0, 0, 0, .5)" {
 		t.Fatalf("custom property raw = %q", got)
 	}
 	if got := string(rules[1].(*Declaration).Value[0].(*BasicValue).Value); got != "{ a:   b }" {
 		t.Fatalf("balanced custom property raw = %q", got)
+	}
+	if got := string(rules[2].(*Declaration).Value[0].(*BasicValue).Value); got != "-->" {
+		t.Fatalf("CDC-only custom property raw = %q", got)
+	}
+	if got := string(rules[3].(*Declaration).Value[0].(*BasicValue).Value); got != "--> b" {
+		t.Fatalf("leading CDC custom property raw = %q", got)
+	}
+	if got := string(rules[4].(*Declaration).Value[0].(*BasicValue).Value); got != "a -->" {
+		t.Fatalf("trailing CDC custom property raw = %q", got)
 	}
 }
 

@@ -110,3 +110,15 @@ func TestMediaRangeSyntax(t *testing.T) {
 		})
 	}
 }
+
+func TestMediaFeatureNestedValueParens(t *testing.T) {
+	ss := parseNoErrors(t, `@media (foo: bar(1)) { .a { color: red; } }`)
+	media := ss.Rules[0].(*MediaAtRule)
+	got := string(media.Query.Queries[0].Features[0].Value)
+	if got != "bar(1)" {
+		t.Fatalf("media feature value = %q", got)
+	}
+	if len(media.Rules) != 1 {
+		t.Fatalf("media rules = %d, want 1", len(media.Rules))
+	}
+}

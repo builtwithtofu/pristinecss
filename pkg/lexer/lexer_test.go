@@ -862,15 +862,11 @@ func TestFrameworks(t *testing.T) {
 	}
 }
 
-func TestCDOCDCAreSkipped(t *testing.T) {
+func TestCDOCDCTokensPreserveSourceBytes(t *testing.T) {
 	source := []byte("<!-- .x { color: red; } -->")
 	toks := lexer.Lex(source)
-	for _, tok := range toks {
-		if string(tok.Literal(source)) == "<!--" || string(tok.Literal(source)) == "-->" {
-			t.Fatalf("CDO/CDC token was emitted: %#v", tok)
-		}
-	}
 	want := []expectedToken{
+		{Type: tokens.CDO, Literal: []byte("<!--")},
 		{Type: tokens.DOT, Literal: []byte(".")},
 		{Type: tokens.IDENT, Literal: []byte("x")},
 		{Type: tokens.LBRACE, Literal: []byte("{")},
@@ -879,6 +875,7 @@ func TestCDOCDCAreSkipped(t *testing.T) {
 		{Type: tokens.IDENT, Literal: []byte("red")},
 		{Type: tokens.SEMICOLON, Literal: []byte(";")},
 		{Type: tokens.RBRACE, Literal: []byte("}")},
+		{Type: tokens.CDC, Literal: []byte("-->")},
 	}
 	if len(toks)-1 != len(want) {
 		t.Fatalf("tokens = %d, want %d", len(toks)-1, len(want))

@@ -116,6 +116,12 @@ func (pv *ParseVisitor) consume(tokenType tokens.TokenType, errorMessage string)
 	return false
 }
 
+func (pv *ParseVisitor) skipRuleBoundaryTokens() {
+	for pv.currentTokenIs(tokens.CDO) || pv.currentTokenIs(tokens.CDC) || pv.currentTokenIs(tokens.SEMICOLON) {
+		pv.advance()
+	}
+}
+
 func (pv *ParseVisitor) addError(message string, token *tokens.Token) {
 	if token == nil {
 		token = &pv.eofToken

@@ -1,6 +1,11 @@
 package parser
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+
+	"github.com/builtwithtofu/pristinecss/pkg/lexer"
+)
 
 func TestContainerAtRule(t *testing.T) {
 	tests := []struct {
@@ -130,5 +135,34 @@ func TestContainerRangeSyntax(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			parseNoErrors(t, tt.input)
 		})
+	}
+}
+
+func TestContainerRangeKeepsSourceSpan(t *testing.T) {
+	source := []byte(`@container (width < 400px) { .a { color: red; } }`)
+	before := append([]byte(nil), source...)
+	toks := lexer.Lex(source)
+	ss, errs := Parse(source, toks)
+	if len(errs) != 0 {
+		t.Fatalf("unexpected parse errors: %v", errs)
+	}
+	if !bytes.Equal(source, before) {
+		t.Fatalf("source mutated during parse: %q", source)
+	}
+	container := ss.Rules[0].(*ContainerAtRule)
+	got := string(container.Query.Conditions[0].Features[0].Name)
+	if got != "width < 400px" {
+		t.Fatalf("container feature = %q", got)
+	}
+	if len(container.Declarations) != 1 {
+		t.Fatalf("container declarations = %d, want 1", len(container.Declarations))
+	}
+}
+
+func TestContainerNestedConditionParens(t *testing.T) {
+	ss := parseNoErrors(t, `@container ((width > 400px) and (height > 400px)) { .a { color: red; } }`)
+	container := ss.Rules[0].(*ContainerAtRule)
+	if len(container.Declarations) != 1 {
+		t.Fatalf("container declarations = %d, want 1", len(container.Declarations))
 	}
 }
