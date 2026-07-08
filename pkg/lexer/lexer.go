@@ -110,9 +110,6 @@ func (l *lexer) tokenize() []tokens.Token {
 
 func (l *lexer) nextToken() tokens.Token {
 	l.skipWhitespace()
-	for l.skipCDOCDC() {
-		l.skipWhitespace()
-	}
 	tok := tokens.Token{
 		Line:   uint32(l.line),
 		Column: uint32(l.column),
@@ -152,7 +149,14 @@ func (l *lexer) nextToken() tokens.Token {
 	case GREATER:
 		tok.Type = tokens.GREATER
 	case LESS:
-		tok.Type = tokens.LESS
+		if l.peekChar() == '!' && l.peekNextChar() == '-' && l.peekThirdChar() == '-' {
+			l.readChar()
+			l.readChar()
+			l.readChar()
+			tok.Type = tokens.CDO
+		} else {
+			tok.Type = tokens.LESS
+		}
 	case TILDE:
 		tok.Type = tokens.TILDE
 	case PIPE:
@@ -236,22 +240,6 @@ func (l *lexer) nextToken() tokens.Token {
 	return tok
 }
 
-func (l *lexer) skipCDOCDC() bool {
-	if l.ch == '<' && l.peekChar() == '!' && l.peekNextChar() == '-' && l.peekThirdChar() == '-' {
-		for i := 0; i < 4; i++ {
-			l.readChar()
-		}
-		return true
-	}
-	if l.ch == '-' && l.peekChar() == '-' && l.peekNextChar() == '>' {
-		for i := 0; i < 3; i++ {
-			l.readChar()
-		}
-		return true
-	}
-	return false
-}
-
 func (l *lexer) readChar() {
 	if l.readPosition >= len(l.input) {
 		l.ch = EOF
@@ -301,6 +289,11 @@ func (l *lexer) handleSlash() tokens.TokenType {
 
 func (l *lexer) handleDash() tokens.TokenType {
 	if l.peekChar() == '-' {
+		if l.peekNextChar() == '>' {
+			l.readChar() // consume second '-'
+			l.readChar() // consume '>'
+			return tokens.CDC
+		}
 		l.readChar() // consume second '-'
 		return l.readCustomProperty()
 	} else if isDigit[l.peekChar()] {

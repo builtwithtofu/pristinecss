@@ -35,6 +35,10 @@ func (s *Stylesheet) String() string {
 func visitStylesheet(pv *ParseVisitor, node Node) {
 	s := node.(*Stylesheet)
 	for !pv.currentTokenIs(tokens.EOF) {
+		pv.skipRuleBoundaryTokens()
+		if pv.currentTokenIs(tokens.EOF) {
+			break
+		}
 		var childNode Node
 		switch pv.currentToken.Type {
 		case tokens.COMMENT:

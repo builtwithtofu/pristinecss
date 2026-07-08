@@ -199,19 +199,24 @@ func (pv *ParseVisitor) captureMediaFeatureValue() []byte {
 func (pv *ParseVisitor) captureMediaFeatureSpan() (int, int) {
 	parenDepth := 0
 	start, end := -1, -1
-	for !pv.currentTokenIs(tokens.RPAREN) && !pv.currentTokenIs(tokens.EOF) {
+	for !pv.currentTokenIs(tokens.EOF) {
 		mark := pv.progressMark()
+		if pv.currentTokenIs(tokens.RPAREN) {
+			if parenDepth == 0 {
+				break
+			}
+			parenDepth--
+			end = int(pv.currentToken.End)
+			pv.advance()
+			pv.ensureProgress(mark, "media feature value")
+			continue
+		}
 		if start < 0 {
 			start = int(pv.currentToken.Start)
 		}
 		end = int(pv.currentToken.End)
 		if pv.currentTokenIs(tokens.LPAREN) {
 			parenDepth++
-		} else if pv.currentTokenIs(tokens.RPAREN) {
-			if parenDepth == 0 {
-				break
-			}
-			parenDepth--
 		}
 		pv.advance()
 		pv.ensureProgress(mark, "media feature value")

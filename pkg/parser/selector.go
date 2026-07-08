@@ -56,18 +56,7 @@ type SelectorValue struct {
 }
 
 func (sv SelectorValue) String() string {
-	return fmt.Sprintf("{Type: %s, Value: %q}", selectorTypeToString(sv.Type), sv.displayValueString())
-}
-
-func (sv SelectorValue) displayValueString() string {
-	switch {
-	case sv.Type == Class && (len(sv.Value) == 0 || sv.Value[0] != '.'):
-		return "." + string(sv.Value)
-	case sv.Type == ID && (len(sv.Value) == 0 || sv.Value[0] != '#'):
-		return "#" + string(sv.Value)
-	default:
-		return string(sv.Value)
-	}
+	return fmt.Sprintf("{Type: %s, Value: %q}", selectorTypeToString(sv.Type), string(sv.Value))
 }
 
 const maxRuleBlockDepth = 128
@@ -93,6 +82,10 @@ func (pv *ParseVisitor) parseRuleBlock(allowBareDeclarations bool) []Node {
 
 	var rules []Node
 	for !pv.currentTokenIs(tokens.RBRACE) && !pv.currentTokenIs(tokens.EOF) {
+		pv.skipRuleBoundaryTokens()
+		if pv.currentTokenIs(tokens.RBRACE) || pv.currentTokenIs(tokens.EOF) {
+			break
+		}
 		mark := pv.progressMark()
 		switch {
 		case pv.currentTokenIs(tokens.COMMENT):
@@ -239,8 +232,10 @@ func (pv *ParseVisitor) parseSelectorUntil(s *Selector, stops ...tokens.TokenTyp
 			}
 		case tokens.DOT:
 			if pv.nextTokenIs(tokens.IDENT) || pv.nextTokenIs(tokens.NUMBER) {
+				start := int(pv.currentToken.Start)
 				pv.advance()
-				value = SelectorValue{Type: Class, Value: pv.currentLiteral()}
+				end := int(pv.currentToken.End)
+				value = SelectorValue{Type: Class, Value: pv.sourceSpan(start, end)}
 				hasValue = true
 				pv.advance()
 			} else {
@@ -250,8 +245,10 @@ func (pv *ParseVisitor) parseSelectorUntil(s *Selector, stops ...tokens.TokenTyp
 			}
 		case tokens.HASH:
 			if pv.nextTokenIs(tokens.IDENT) || pv.nextTokenIs(tokens.NUMBER) {
+				start := int(pv.currentToken.Start)
 				pv.advance()
-				value = SelectorValue{Type: ID, Value: pv.currentLiteral()}
+				end := int(pv.currentToken.End)
+				value = SelectorValue{Type: ID, Value: pv.sourceSpan(start, end)}
 				hasValue = true
 				pv.advance()
 			} else {
@@ -293,12 +290,7 @@ func (pv *ParseVisitor) parseSelectorUntil(s *Selector, stops ...tokens.TokenTyp
 }
 
 func selectorSourceLength(start tokens.Token, value SelectorValue) uint32 {
-	switch value.Type {
-	case Class, ID:
-		return uint32(len(value.Value) + 1)
-	default:
-		return uint32(len(value.Value))
-	}
+	return uint32(len(value.Value))
 }
 
 func (pv *ParseVisitor) parseNamespaceSelector() (SelectorValue, bool) {

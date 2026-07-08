@@ -15,6 +15,8 @@ const (
 	URI
 
 	// Constructs
+	CDO
+	CDC
 	STARTS_WITH
 	DBLCOLON
 
@@ -67,6 +69,10 @@ func (tt TokenType) String() string {
 		return "COLOR"
 	case URI:
 		return "URI"
+	case CDO:
+		return "<!--"
+	case CDC:
+		return "-->"
 	case STARTS_WITH:
 		return "^="
 	case DBLCOLON:
