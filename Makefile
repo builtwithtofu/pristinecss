@@ -1,53 +1,27 @@
-# Variables
-PROJECT_NAME := stylocss
-GO_FILES := $(shell find . -type f -name '*.go')
-GO := $(shell command -v go 2> /dev/null)
+GO ?= go
 TEST_PATH ?= ./...
+BENCH ?= BenchmarkParseFrameworks
 
-# Default target
-.PHONY: help
+.PHONY: help test vet bench race deps clean
+
 help:
-	@echo "Usage:"
-	@echo "  make [target]"
-	@echo ""
-	@echo "Targets:"
-	@echo "  all              Build the project"
-	@echo "  build            Build the project"
-	@echo "  test [path]      Runs the tests for the project. Default: ./..."
-	@echo "  clean            Clean the project"
-	@echo "  deps             Install dependencies"
-	@echo "  help             Display this help message"
+	@echo "Targets: test vet bench race deps clean"
 
-# Build target
-.PHONY: build
-build: check-deps clean
-	$(GO) build -o ./bin/main ./cmd/stylocss
+test:
+	$(GO) test $(TEST_PATH)
 
-# Clean target
-.PHONY: clean
-clean:
-	$(GO) clean
+vet:
+	$(GO) vet ./...
 
-# Run tests
-.PHONY: test
-test: check-deps
-	@echo "Running tests for: $(TEST_PATH)"
-	@$(GO) test -json $(TEST_PATH) | gotestfmt
+bench:
+	$(GO) test ./... -run '^$$' -bench $(BENCH) -count 6
 
-# Install dependencies
-.PHONY: deps
-deps: check-deps
+race:
+	$(GO) test -race ./...
+
+deps:
 	$(GO) mod tidy
 
-# Check for dependencies
-.PHONY: check-deps
-check-deps:
-ifndef GO
-	$(error "Go is not installed.")
-endif
-
-# Default target to display help message
-.PHONY: all
-all: help
-
+clean:
+	$(GO) clean ./...
 
