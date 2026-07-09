@@ -31,6 +31,20 @@ func TestAllocBudget(t *testing.T) {
 	}
 }
 
+func TestParseIntoRelexesRefilledBuffer(t *testing.T) {
+	buf := []byte("a{color:red}")
+	var s Sheet
+	if errs := ParseInto(buf, &s); len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	copy(buf, "@x{y:z}     ")
+	if errs := ParseInto(buf, &s); len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	if got := string(s.Emit(nil, EmitOptions{})); got != "@x{y:z}" {
+		t.Fatalf("emit after refill = %q", got)
+	}
+}
 
 func TestFrameworks(t *testing.T) {
 	entries, err := os.ReadDir(filepath.Join("test-data", "frameworks"))
