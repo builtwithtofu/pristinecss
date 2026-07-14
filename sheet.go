@@ -49,15 +49,15 @@ type Sheet struct {
 type ParseError struct {
 	Message string
 	Offset  uint32
-	line    uint32
-	column  uint32
+	line0   uint32
+	column0 uint32
 }
 
 // Line returns the 1-based source line for the error offset.
-func (e ParseError) Line() int { return int(e.line) + 1 }
+func (e ParseError) Line() int { return int(e.line0) + 1 }
 
-// Column returns the 1-based source column for the error offset.
-func (e ParseError) Column() int { return int(e.column) + 1 }
+// Column returns the 1-based byte column for the error offset.
+func (e ParseError) Column() int { return int(e.column0) + 1 }
 
 // Source returns the borrowed source buffer for this sheet.
 func (s *Sheet) Source() []byte {

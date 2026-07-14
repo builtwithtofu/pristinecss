@@ -22,24 +22,26 @@ func buildLines(src []byte, dst []uint32) []uint32 {
 }
 
 func resolveParseErrorPositions(src []byte, errs []ParseError) {
-	var cursor, line, lineStart uint32
+	var cursor, line0, lineStart uint32
 	for i := range errs {
 		off := errs[i].Offset
 		if int(off) > len(src) {
 			off = uint32(len(src))
 		}
 		if off < cursor {
-			cursor, line, lineStart = 0, 0, 0
+			// Recovery normally reports errors in source order. Restarting keeps an
+			// earlier offset correct without retaining a source-wide line index.
+			cursor, line0, lineStart = 0, 0, 0
 		}
 		for cursor < off {
 			if src[cursor] == '\n' {
-				line++
+				line0++
 				lineStart = cursor + 1
 			}
 			cursor++
 		}
-		errs[i].line = line
-		errs[i].column = off - lineStart
+		errs[i].line0 = line0
+		errs[i].column0 = off - lineStart
 	}
 }
 

@@ -29,7 +29,7 @@ func BenchmarkParseIntoFrameworks(b *testing.B) {
 	for i := 0; i < b.N; i++ { _ = ParseInto(src, &s) }
 }
 
-func BenchmarkParseErrorPositions(b *testing.B) {
+func BenchmarkParseWithErrorPositions(b *testing.B) {
 	src := append(bytes.Repeat([]byte("x{}\n"), 10_000), '}')
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
