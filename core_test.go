@@ -56,9 +56,41 @@ func TestDumpHandBuiltSheet(t *testing.T) {
 	if got := b.String(); got != want { t.Fatalf("Dump mismatch\nwant:\n%s\ngot:\n%s", want, got) }
 }
 
-func TestParseErrorLineColumn(t *testing.T) {
-	e := ParseError{Offset: 4, src: []byte("a{}\nb{}")}
-	if e.Line() != 2 || e.Column() != 1 { t.Fatalf("line/col = %d/%d", e.Line(), e.Column()) }
+func TestParseErrorPositionsAreOwned(t *testing.T) {
+	src := []byte("a{}\n  }\n    }")
+	_, errs := Parse(src)
+	if len(errs) != 2 {
+		t.Fatalf("errors = %d, want 2", len(errs))
+	}
+	want := [][2]int{{2, 3}, {3, 5}}
+	for i, err := range errs {
+		if err.Line() != want[i][0] || err.Column() != want[i][1] {
+			t.Fatalf("error %d line/col = %d/%d, want %d/%d", i, err.Line(), err.Column(), want[i][0], want[i][1])
+		}
+	}
+
+	for i := range src {
+		src[i] = 'x'
+	}
+	if errs[0].Line() != 2 || errs[0].Column() != 3 {
+		t.Fatalf("position changed after source reuse: %d/%d", errs[0].Line(), errs[0].Column())
+	}
+
+	var line, column int
+	allocs := testing.AllocsPerRun(100, func() {
+		line, column = errs[0].Line(), errs[0].Column()
+	})
+	if allocs != 0 {
+		t.Fatalf("Line/Column allocs = %.0f, want 0", allocs)
+	}
+	if line != 2 || column != 3 {
+		t.Fatalf("line/col after allocation check = %d/%d", line, column)
+	}
+
+	var zero ParseError
+	if zero.Line() != 1 || zero.Column() != 1 {
+		t.Fatalf("zero ParseError line/col = %d/%d, want 1/1", zero.Line(), zero.Column())
+	}
 }
 
 func dumpString(s *Sheet) string { var b strings.Builder; s.Dump(&b); return b.String() }
