@@ -21,12 +21,31 @@ func buildLines(src []byte, dst []uint32) []uint32 {
 	return dst
 }
 
+func resolveParseErrorPositions(src []byte, errs []ParseError) {
+	var cursor, line, lineStart uint32
+	for i := range errs {
+		off := errs[i].Offset
+		if int(off) > len(src) {
+			off = uint32(len(src))
+		}
+		if off < cursor {
+			cursor, line, lineStart = 0, 0, 0
+		}
+		for cursor < off {
+			if src[cursor] == '\n' {
+				line++
+				lineStart = cursor + 1
+			}
+			cursor++
+		}
+		errs[i].line = line
+		errs[i].column = off - lineStart
+	}
+}
+
 func lineCol(src []byte, lines []uint32, off uint32) (int, int) {
 	if int(off) > len(src) {
 		off = uint32(len(src))
-	}
-	if lines == nil {
-		lines = buildLines(src, nil)
 	}
 	i := sort.Search(len(lines), func(i int) bool { return lines[i] >= off })
 	lineStart := uint32(0)

@@ -58,9 +58,7 @@ func parseInto(src []byte, s *Sheet, cacheSource bool) []ParseError {
 	root := p.beginAt(KindStylesheet, 0)
 	p.parseList(lexer.EOF, 0)
 	p.finish(root, uint32(len(src)))
-	for i := range s.errs {
-		s.errs[i].src = src
-	}
+	resolveParseErrorPositions(s.src, s.errs)
 	return s.errs
 }
 
@@ -112,7 +110,7 @@ func (p *parser) leaf(k Kind, lo, hi uint32, aux uint16, flags Flags) NodeID {
 	return id
 }
 func (p *parser) err(tok lexer.Token, msg string, args ...any) {
-	p.s.errs = append(p.s.errs, ParseError{Message: fmt.Sprintf(msg, args...), Offset: tok.Start, src: p.src})
+	p.s.errs = append(p.s.errs, ParseError{Message: fmt.Sprintf(msg, args...), Offset: tok.Start})
 }
 
 func (p *parser) parseList(until lexer.Type, depth int) {

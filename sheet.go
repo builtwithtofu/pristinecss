@@ -44,18 +44,20 @@ type Sheet struct {
 	mutated  bool
 }
 
-// ParseError reports a recoverable CSS parse error at a byte offset.
+// ParseError reports a recoverable CSS parse error at a byte offset. Its line and
+// column are resolved during parsing and remain valid independently of the source buffer.
 type ParseError struct {
 	Message string
 	Offset  uint32
-	src     []byte
+	line    uint32
+	column  uint32
 }
 
 // Line returns the 1-based source line for the error offset.
-func (e ParseError) Line() int { line, _ := lineCol(e.src, nil, e.Offset); return line }
+func (e ParseError) Line() int { return int(e.line) + 1 }
 
 // Column returns the 1-based source column for the error offset.
-func (e ParseError) Column() int { _, col := lineCol(e.src, nil, e.Offset); return col }
+func (e ParseError) Column() int { return int(e.column) + 1 }
 
 // Source returns the borrowed source buffer for this sheet.
 func (s *Sheet) Source() []byte {
