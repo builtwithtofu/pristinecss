@@ -59,6 +59,8 @@ const (
 	KindAtViewTransition
 	KindAtGeneric
 
+	KindRawStatement
+
 	kindCount
 )
 
@@ -154,6 +156,7 @@ var kinds = [kindCount]kindInfo{
 	KindAtPositionTry:       {"@position-try", classAtRule, rolePrelude},
 	KindAtViewTransition:    {"@view-transition", classAtRule, rolePrelude},
 	KindAtGeneric:           {"@generic", classAtRule, rolePrelude},
+	KindRawStatement:        {"raw-statement", classLeaf, roleNone},
 }
 
 func init() {
@@ -172,7 +175,7 @@ func (k Kind) String() string {
 }
 
 func (k Kind) isAtRule() bool { return k >= KindAtCharset && k <= KindAtGeneric }
-func (k Kind) isOpaque() bool { return k == KindValRaw || kinds[k].class == classLeaf }
+func (k Kind) isOpaque() bool { return kinds[k].class == classLeaf }
 
 func atKind(name []byte) Kind {
 	switch {

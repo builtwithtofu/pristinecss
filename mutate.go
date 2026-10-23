@@ -91,10 +91,6 @@ func (s *Sheet) Compact() []NodeID {
 			out[newID].Lo, out[newID].Hi, out[newID].Sub = lo, hi, 1
 			return newID
 		}
-		if n.Kind == KindValRaw {
-			out[newID].Sub = 1
-			return newID
-		}
 		end := id + NodeID(n.Sub)
 		for c := id + 1; c < end; c += NodeID(oldNodes[c].Sub) {
 			copyNode(c)

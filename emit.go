@@ -53,8 +53,16 @@ func (s *Sheet) emitChildren(dst []byte, start, end NodeID, o EmitOptions, depth
 			continue
 		}
 		lo := len(dst)
-		dst = s.emitNode(dst, id, o, depth)
-		if top && o.OnRule != nil && (n.Kind == KindStyleRule || n.Kind.isAtRule()) {
+		if n.Kind == KindRawStatement {
+			// Statement-level raw bytes exclude their ';' like declarations do.
+			dst = appendIndent(dst, o.Style, depth)
+			dst = append(dst, s.nodeBytes(n)...)
+			dst = append(dst, ';')
+			dst = append(dst, o.Style.Newline...)
+		} else {
+			dst = s.emitNode(dst, id, o, depth)
+		}
+		if top && o.OnRule != nil && (n.Kind == KindStyleRule || n.Kind.isAtRule() || n.Kind == KindRawStatement) {
 			o.OnRule(id, lo, len(dst))
 		}
 	}
@@ -63,7 +71,7 @@ func (s *Sheet) emitChildren(dst []byte, start, end NodeID, o EmitOptions, depth
 
 func (s *Sheet) emitNode(dst []byte, id NodeID, o EmitOptions, depth int) []byte {
 	n := s.nodes[id]
-	if n.Flags&FlagScratch != 0 || n.Kind == KindValRaw && n.Sub > 1 {
+	if n.Flags&FlagScratch != 0 {
 		return append(dst, s.nodeBytes(n)...)
 	}
 	switch {
