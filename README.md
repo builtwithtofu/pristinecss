@@ -41,8 +41,7 @@ PristineCSS provides reusable CSS mechanisms rather than application policy. Con
 decide how to partition inputs, interpret custom at-rules, scope selectors, assign
 capability bits, construct variants, and deliver assets.
 
-Settled representation, ownership, frame, and library-boundary decisions are recorded in
-[`docs/adr/`](docs/adr/). Project terms are defined in [`CONTEXT.md`](CONTEXT.md).
+The design philosophy is recorded in [`docs/adr/`](docs/adr/).
 
 ## Performance snapshot
 
