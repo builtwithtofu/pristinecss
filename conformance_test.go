@@ -154,7 +154,7 @@ func TestMediaFeatureChildren(t *testing.T) {
 }
 
 func TestKindReachability(t *testing.T) {
-	src := []byte(`/*!bang*/ svg|a#id.class[attr^="x"]:has(.x) > *, &::before { color: rgb(1,2,3); content: 'x'; --raw: { token soup; }; }
+	src := []byte(`/*!bang*/ svg|a#id.class[attr^="x"]:has(.x) > *, &::before { color: rgb(1,2,3); content: 'x'; --raw: { token soup; }; *display:inline; }
 @charset "UTF-8"; @import url(x); @media (min-width:1px),(hover:hover){a{color:red}} @container card (inline-size > 30em){a{color:red}}
 @font-face{font-family:x} @font-feature-values x{} @counter-style x{} @color-profile x{} @keyframes x{from{opacity:0}}
 @supports (display:grid){a{display:grid}} @layer a,b; @scope (.x){a{color:red}} @starting-style{a{opacity:0}} @property --x{syntax:"*"}

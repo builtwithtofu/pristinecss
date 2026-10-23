@@ -48,22 +48,22 @@ func (p *parser) looksLikeDeclaration() bool {
 
 func (p *parser) parseStyleRule(depth int) {
 	lo := p.cur().Start
-	id := p.beginAt(KindStyleRule, lo)
 	preludeStart := p.pos
 	for p.cur().Type != lexer.EOF && p.cur().Type != lexer.LBrace && p.cur().Type != lexer.Semicolon && p.cur().Type != lexer.RBrace {
 		p.advance()
 	}
-	p.emitSelectorParts(preludeStart, p.pos)
 	if p.cur().Type == lexer.LBrace {
+		id := p.beginAt(KindStyleRule, lo)
+		p.emitSelectorParts(preludeStart, p.pos)
 		hi := p.parseBlock(depth + 1)
 		p.finish(id, hi)
 		return
 	}
-	hi := p.cur().End
+	// Neither a declaration nor a rule: keep the bytes, minus the ';' the emitter restores.
+	p.leaf(KindRawStatement, lo, p.toks[p.pos-1].End, 0, 0)
 	if p.cur().Type == lexer.Semicolon {
 		p.advance()
 	}
-	p.finish(id, hi)
 }
 
 func (p *parser) parseBlock(depth int) uint32 {

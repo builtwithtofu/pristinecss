@@ -7,16 +7,9 @@ import (
 )
 
 func TestAllocBudget(t *testing.T) {
-	entries, err := os.ReadDir(filepath.Join("test-data", "frameworks"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".css" {
-			continue
-		}
-		t.Run(e.Name(), func(t *testing.T) {
-			src := readFramework(t, e.Name())
+	for _, path := range corpusFiles(t) {
+		t.Run(path, func(t *testing.T) {
+			src := readCSS(t, path)
 			cold := testing.AllocsPerRun(20, func() { _, _ = Parse(src) })
 			if cold > 4 {
 				t.Fatalf("Parse allocs = %.0f, want <=4", cold)
@@ -47,16 +40,9 @@ func TestParseIntoRelexesRefilledBuffer(t *testing.T) {
 }
 
 func TestFrameworks(t *testing.T) {
-	entries, err := os.ReadDir(filepath.Join("test-data", "frameworks"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".css" {
-			continue
-		}
-		t.Run(e.Name(), func(t *testing.T) {
-			src := readFramework(t, e.Name())
+	for _, path := range corpusFiles(t) {
+		t.Run(path, func(t *testing.T) {
+			src := readCSS(t, path)
 			s, errs := Parse(src)
 			if len(errs) != 0 {
 				t.Fatalf("parse errors: %#v", errs[:min(len(errs), 5)])
@@ -68,7 +54,28 @@ func TestFrameworks(t *testing.T) {
 
 func readFramework(t testing.TB, name string) []byte {
 	t.Helper()
-	src, err := os.ReadFile(filepath.Join("test-data", "frameworks", name))
+	return readCSS(t, filepath.Join("test-data", "frameworks", name))
+}
+
+func corpusFiles(t testing.TB) []string {
+	t.Helper()
+	var paths []string
+	for _, dir := range []string{"frameworks", "corpus"} {
+		matches, err := filepath.Glob(filepath.Join("test-data", dir, "*.css"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(matches) == 0 {
+			t.Fatalf("no CSS fixtures in %s", dir)
+		}
+		paths = append(paths, matches...)
+	}
+	return paths
+}
+
+func readCSS(t testing.TB, path string) []byte {
+	t.Helper()
+	src, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,11 +3,17 @@ package pristinecss
 import "github.com/builtwithtofu/pristinecss/internal/lexer"
 
 func (p *parser) emitSelectorParts(start, end int) {
+	for end > start && p.toks[end-1].Type == lexer.Comment {
+		end--
+	}
 	var prevEnd uint32
+	space := -1
 	for i := start; i < end; i++ {
 		t := p.toks[i]
 		if i > start && t.Start > prevEnd && t.Type != lexer.Comma && t.Type != lexer.RBrace && t.Type != lexer.LBrace {
-			p.leaf(KindSelCombinator, prevEnd, t.Start, 0, 0)
+			if space != len(p.s.nodes)-1 {
+				space = int(p.leaf(KindSelCombinator, prevEnd, t.Start, 0, 0))
+			}
 		}
 		switch t.Type {
 		case lexer.Dot:

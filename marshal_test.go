@@ -3,6 +3,7 @@ package pristinecss
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"strings"
 	"testing"
 )
@@ -90,6 +91,10 @@ func TestLoadRejectsMalformedASTNodes(t *testing.T) {
 			blob[frameHeaderLen+16] = byte(KindValRaw)
 			binary.LittleEndian.PutUint32(blob[frameHeaderLen+16+12:], 2)
 		}},
+		{"raw statement children", func(blob []byte) {
+			blob[frameHeaderLen+16] = byte(KindRawStatement)
+			binary.LittleEndian.PutUint32(blob[frameHeaderLen+16+12:], 2)
+		}},
 		{"invalid aux", func(blob []byte) {
 			blob[frameHeaderLen+16] = byte(KindSelPseudo)
 			binary.LittleEndian.PutUint16(blob[frameHeaderLen+16+2:], 0xffff)
@@ -125,5 +130,61 @@ func TestLoadIRRejectsInvalidRuleSpans(t *testing.T) {
 				t.Fatal("LoadIR accepted an invalid rule span")
 			}
 		})
+	}
+}
+
+func TestRawStatementFrameRoundTrip(t *testing.T) {
+	const src = "*zoom:1;.x{*display:inline;--y:foo;zoom:1}"
+	s, errs := Parse([]byte(src))
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	for _, includeSrc := range []bool{false, true} {
+		blob := s.Marshal(includeSrc)
+		if got := binary.LittleEndian.Uint16(blob[4:]); got != 1 {
+			t.Fatalf("frame version = %d, want 1", got)
+		}
+		loaded, err := Load(blob, []byte(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		count := 0
+		for c := range loaded.All(KindRawStatement) {
+			if got := c.Kind().String(); got != "raw-statement" {
+				t.Fatalf("kind string = %q", got)
+			}
+			count++
+		}
+		if count != 2 {
+			t.Fatalf("raw statements = %d, want 2", count)
+		}
+		if got := string(loaded.Emit(nil, EmitOptions{})); got != src {
+			t.Fatalf("loaded emit = %q, want %q", got, src)
+		}
+	}
+}
+
+func TestLoadVersionOneFrame(t *testing.T) {
+	const frame = "5043535301000000080000000000000012000000250d5cb86ae70772" +
+		"0000000000000000120000000800000001000000000000001200000007000000" +
+		"0600000000000000020000000100000002000000020000001200000005000000" +
+		"03100300030000000b0000000200000011000000070000000a00000001000000" +
+		"030004000b00000011000000020000000e000000100000001100000001000000" +
+		"2e787b2d2d793a666f6f3b7a6f6f6d3a317d"
+	blob, err := hex.DecodeString(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(blob, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(loaded.Emit(nil, EmitOptions{})); got != ".x{--y:foo;zoom:1}" {
+		t.Fatalf("version 1 emit = %q", got)
+	}
+	for c := range loaded.All(KindValRaw) {
+		if got := string(loaded.Extract(c.ID()).Emit(nil, EmitOptions{})); got != "foo" {
+			t.Fatalf("version 1 extracted value = %q", got)
+		}
 	}
 }
