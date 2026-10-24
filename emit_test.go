@@ -12,6 +12,8 @@ func TestEmitMinifiedPrettyAndVerbatim(t *testing.T) {
 		{"pretty pseudo", "a:hover{color:red}", Pretty, "a:hover {\n  color: red\n}\n"},
 		{"pretty data uri", "b{background:url(data:image/svg+xml,x y)}", Pretty, "b {\n  background: url(data:image/svg+xml,x y)\n}\n"},
 		{"pretty nested", "@media (min-width:400px){a:hover{color:red} b{background:url(data:image/svg+xml,x y)}}", Pretty, "@media (min-width:400px) {\n  a:hover {\n    color: red\n  }\n  b {\n    background: url(data:image/svg+xml,x y)\n  }\n}\n"},
+		{"url slash star", "a{x:url(/*)}", Minified, "a{x:url(/*)}"},
+		{"value token separation", "a{x:1/**/px}", Minified, "a{x:1 px}"},
 		{"custom tab style", "a{color:red}", Style{Indent: []byte("\t"), Newline: []byte("\n"), AfterColon: []byte(" "), BeforeBrace: []byte(" "), AfterBrace: []byte("\n")}, "a {\n\tcolor: red\n}\n"},
 	}
 	for _, tt := range tests {
@@ -61,11 +63,13 @@ func TestEmitFilterAndOnRule(t *testing.T) {
 }
 
 func TestEmitWarmBufferNoAllocs(t *testing.T) {
-	s, _ := Parse(readFramework(t, "bootstrap.css"))
-	dst := make([]byte, 0, len(s.src))
-	allocs := testing.AllocsPerRun(50, func() { dst = s.Emit(dst[:0], EmitOptions{}) })
-	if allocs != 0 {
-		t.Fatalf("Emit allocs = %.0f, want 0", allocs)
+	for _, src := range [][]byte{readFramework(t, "bootstrap.css"), []byte(".a/*comment*/.b{color:red}"), []byte("a/*x*/b:not/*x*/(.c),:is(/*x*/d){}")} {
+		s, _ := Parse(src)
+		dst := make([]byte, 0, len(s.src))
+		allocs := testing.AllocsPerRun(50, func() { dst = s.Emit(dst[:0], EmitOptions{}) })
+		if allocs != 0 {
+			t.Fatalf("%.40q: Emit allocs = %.0f, want 0", src, allocs)
+		}
 	}
 }
 

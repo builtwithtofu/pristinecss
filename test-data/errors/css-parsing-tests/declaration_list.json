@@ -1,0 +1,12 @@
+[
+  "",
+  ";; /**/ ; ;",
+  "a:b; c:d 42!important;\n",
+  "z;a:b",
+  "z:x!;a:b",
+  "a:b; c+:d",
+  "@import 'foo.css'; a:b; @import 'bar.css'",
+  "@media screen { div{;}} a:b;; @media print{div{",
+  "@ media screen { div{;}} a:b;; @media print{div{",
+  ""
+]

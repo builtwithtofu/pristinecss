@@ -93,7 +93,16 @@ func TestLexNestedUnquotedURLReturns(t *testing.T) {
 				urls = append(urls, string(tok.Literal(src)))
 			}
 		}
-		want := []string{`url(foo(bar).png)`, `url("foo)bar.svg")`, `url(data:image/svg+xml,x y)`}
+		foundString := false
+		for i, tok := range toks {
+			if tok.Type == String && string(tok.Literal(src)) == `"foo)bar.svg"` {
+				foundString = i >= 2 && toks[i-1].Type == LParen && toks[i-2].Type == Ident && string(toks[i-2].Literal(src)) == "url" && toks[i+1].Type == RParen
+			}
+		}
+		if !foundString {
+			t.Fatal("quoted URL must be a function with an ordinary string")
+		}
+		want := []string{`url(foo(bar)`, `url(data:image/svg+xml,x y)`}
 		if len(urls) != len(want) {
 			t.Fatalf("URL tokens = %q, want %q", urls, want)
 		}
@@ -104,5 +113,39 @@ func TestLexNestedUnquotedURLReturns(t *testing.T) {
 		}
 	case <-time.After(250 * time.Millisecond):
 		t.Fatal("Lex did not return for a nested unquoted url()")
+	}
+}
+
+// css-syntax-3: CR, FF and CRLF are newlines; a newline ends a string and
+// one whitespace (CRLF as one) after a hex escape belongs to the escape.
+func TestLexNewlinesAndEscapeWhitespace(t *testing.T) {
+	tests := []struct{ in, first string }{
+		{"\"a\rb\"", "\"a"},
+		{"\"a\fb\"", "\"a"},
+		{"\"a\r\nb\"", "\"a"},
+		{"\"a\\\r\nb\"", "\"a\\\r\nb\""},
+		{"a\\9\fb", "a\\9\fb"},
+		{"a\\9\r\nb", "a\\9\r\nb"},
+		{"a\\9\tb", "a\\9\tb"},
+		{"a\\9\n\nb", "a\\9\n"},
+		{"\"a\\61\r\nb\"", "\"a\\61\r\nb\""},
+		{"\"a\\61\fb\"", "\"a\\61\fb\""},
+	}
+	for _, tt := range tests {
+		src := []byte(tt.in)
+		if got := string(Lex(src)[0].Literal(src)); got != tt.first {
+			t.Errorf("Lex(%q)[0] = %q, want %q", tt.in, got, tt.first)
+		}
+	}
+}
+
+// css-syntax-3: "0url(" is a dimension with unit "url" followed by "(", not a URL.
+func TestLexURLAfterNumberIsUnit(t *testing.T) {
+	for _, src := range []string{"0url(x)", ".5url(x)"} {
+		for _, tok := range Lex([]byte(src)) {
+			if tok.Type == URI {
+				t.Errorf("Lex(%q) produced URL token %q", src, tok.Literal([]byte(src)))
+			}
+		}
 	}
 }

@@ -1,0 +1,17 @@
+[
+  "",
+  "foo",
+  "foo 4",
+  "@foo",
+  "@foo bar; \t/* comment */",
+  " /**/ @foo bar{[(4",
+  "@foo { bar",
+  "@foo [ bar",
+  " /**/ div > p { color: #aaa;  } /**/ ",
+  " /**/ { color: #aaa  ",
+  " /* CDO/CDC are not special */ <!-- --> {",
+  "div { color: #aaa; } p{}",
+  "div {} -->",
+  "{}a",
+  "{}@a"
+]

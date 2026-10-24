@@ -56,36 +56,15 @@ func (p *parser) parseDeclaration() {
 }
 
 func (p *parser) scanDeclarationValue() int {
-	parenDepth, bracketDepth, braceDepth := 0, 0, 0
 	for p.cur().Type != lexer.EOF {
-		t := p.cur().Type
-		if t == lexer.Semicolon && parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
-			break
+		switch p.cur().Type {
+		case lexer.Semicolon, lexer.RBrace:
+			return p.pos
+		case lexer.LParen, lexer.LBracket, lexer.LBrace:
+			p.pos, _ = p.componentEnd(p.pos, len(p.toks)-1, true)
+		default:
+			p.advance()
 		}
-		if t == lexer.RBrace && braceDepth == 0 {
-			break
-		}
-		switch t {
-		case lexer.LParen:
-			parenDepth++
-		case lexer.RParen:
-			if parenDepth > 0 {
-				parenDepth--
-			}
-		case lexer.LBracket:
-			bracketDepth++
-		case lexer.RBracket:
-			if bracketDepth > 0 {
-				bracketDepth--
-			}
-		case lexer.LBrace:
-			braceDepth++
-		case lexer.RBrace:
-			if braceDepth > 0 {
-				braceDepth--
-			}
-		}
-		p.advance()
 	}
 	return p.pos
 }
@@ -99,31 +78,25 @@ func (p *parser) previousNonComment(end int) int {
 	return -1
 }
 
+func (p *parser) nextNonComment(i, end int) int {
+	for i < end && p.toks[i].Type == lexer.Comment {
+		i++
+	}
+	return i
+}
+
 func (p *parser) valueTokenIsTopLevel(start, target int) bool {
-	parenDepth, bracketDepth, braceDepth := 0, 0, 0
 	for i := start; i < target; i++ {
 		switch p.toks[i].Type {
-		case lexer.LParen:
-			parenDepth++
-		case lexer.RParen:
-			if parenDepth > 0 {
-				parenDepth--
+		case lexer.LParen, lexer.LBracket, lexer.LBrace:
+			last, _ := p.componentEnd(i, len(p.toks)-1, true)
+			if last > target {
+				return false
 			}
-		case lexer.LBracket:
-			bracketDepth++
-		case lexer.RBracket:
-			if bracketDepth > 0 {
-				bracketDepth--
-			}
-		case lexer.LBrace:
-			braceDepth++
-		case lexer.RBrace:
-			if braceDepth > 0 {
-				braceDepth--
-			}
+			i = last - 1
 		}
 	}
-	return parenDepth == 0 && bracketDepth == 0 && braceDepth == 0
+	return true
 }
 
 func (p *parser) emitValueParts(start, end int) {
@@ -131,37 +104,26 @@ func (p *parser) emitValueParts(start, end int) {
 		t := p.toks[i]
 		switch t.Type {
 		case lexer.Ident:
-			if i+1 < end && p.toks[i+1].Type == lexer.LParen {
+			if i+1 < end && p.toks[i+1].Type == lexer.LParen && p.toks[i+1].Start == t.End {
 				fid := p.beginAt(KindValFunction, t.Start)
 				p.s.nodes[fid].Aux = uint16(t.End - t.Start)
-				i += 2
-				childStart := i
-				depth := 1
-				for i < end && depth > 0 {
-					if p.toks[i].Type == lexer.LParen {
-						depth++
-					} else if p.toks[i].Type == lexer.RParen {
-						depth--
-					}
-					if depth > 0 {
-						i++
-					}
+				last, closed := p.componentEnd(i+1, end, false)
+				childEnd := last
+				if closed {
+					childEnd--
+				} else {
+					p.err(p.toks[i+1], "expected ')' to close value function")
 				}
-				if depth > 0 {
-					p.err(p.toks[childStart-1], "expected ')' to close value function")
-				}
-				p.emitValueParts(childStart, i)
-				hi := p.toks[childStart-1].End
-				if i > childStart {
-					hi = p.toks[i-1].End
-				}
-				if i < end {
-					hi = p.toks[i].End
-				}
-				p.finish(fid, hi)
+				p.emitValueParts(i+2, childEnd)
+				p.finish(fid, p.toks[last-1].End)
+				i = last - 1
 			} else {
 				p.leaf(KindValBasic, t.Start, t.End, 0, 0)
 			}
+		case lexer.LParen, lexer.LBracket, lexer.LBrace:
+			last, _ := p.componentEnd(i, end, false)
+			p.leaf(KindValRaw, t.Start, p.toks[last-1].End, 0, 0)
+			i = last - 1
 		case lexer.String:
 			flags := Flags(0)
 			if len(p.src[t.Start:t.End]) > 0 && p.src[t.Start] == '\'' {
@@ -174,4 +136,35 @@ func (p *parser) emitValueParts(start, end int) {
 			p.leaf(KindValBasic, t.Start, t.End, 0, 0)
 		}
 	}
+}
+
+func (p *parser) componentEnd(start, end int, ruleBoundary bool) (int, bool) {
+	var stackBuf [16]lexer.Type
+	stack := stackBuf[:0]
+	braces := 0
+	for i := start; i < end; i++ {
+		if ruleBoundary && p.toks[i].Type == lexer.RBrace && braces == 0 {
+			return i, false
+		}
+		switch p.toks[i].Type {
+		case lexer.LParen:
+			stack = append(stack, lexer.RParen)
+		case lexer.LBracket:
+			stack = append(stack, lexer.RBracket)
+		case lexer.LBrace:
+			stack = append(stack, lexer.RBrace)
+			braces++
+		default:
+			if len(stack) > 0 && p.toks[i].Type == stack[len(stack)-1] {
+				if p.toks[i].Type == lexer.RBrace {
+					braces--
+				}
+				stack = stack[:len(stack)-1]
+				if len(stack) == 0 {
+					return i + 1, true
+				}
+			}
+		}
+	}
+	return end, false
 }

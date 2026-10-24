@@ -171,3 +171,23 @@ func TestNestedReplacementSurvivesCompactAndMarshal(t *testing.T) {
 		t.Fatalf("load emit = %q", got)
 	}
 }
+
+func TestReplaceRawDeclarationSeparator(t *testing.T) {
+	for _, tt := range []struct{ replacement, minified, pretty string }{
+		{"color:blue", ".x{color:blue;zoom:1}", ".x {\n  color:blue;\n  zoom: 1\n}\n"},
+		{"color:blue;", ".x{color:blue;zoom:1}", ".x {\n  color:blue;\n  zoom: 1\n}\n"},
+		{"color:blue; ", ".x{color:blue; zoom:1}", ".x {\n  color:blue; \n  zoom: 1\n}\n"},
+	} {
+		s, _ := Parse([]byte(".x{color:red;zoom:1}"))
+		for c := range s.All(KindDeclaration) {
+			s.ReplaceRaw(c.ID(), []byte(tt.replacement))
+			break
+		}
+		if got := string(s.Emit(nil, EmitOptions{Style: Minified})); got != tt.minified {
+			t.Errorf("replacement %q: minified = %q, want %q", tt.replacement, got, tt.minified)
+		}
+		if got := string(s.Emit(nil, EmitOptions{Style: Pretty})); got != tt.pretty {
+			t.Errorf("replacement %q: pretty = %q, want %q", tt.replacement, got, tt.pretty)
+		}
+	}
+}

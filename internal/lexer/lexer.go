@@ -87,6 +87,29 @@ func LexInto(input []byte, dst []Token) []Token {
 	}
 }
 
+// Splits reports whether input lexes into separate tokens at offset at: no
+// token crosses it, and no name ends there with "(" after it, which would make
+// a function. It does not allocate.
+func Splits(input []byte, at int) bool {
+	l := scanner{input: input}
+	l.readChar()
+	ident := false
+	for {
+		tok := l.nextToken()
+		start, end := int(tok.Start), int(tok.End)
+		if tok.Type == EOF || start > at {
+			return true
+		}
+		if start < at && end > at {
+			return false
+		}
+		if start == at {
+			return !(ident && tok.Type == LParen)
+		}
+		ident = end == at && tok.Type == Ident
+	}
+}
+
 func (l *scanner) nextToken() Token {
 	l.skipWhitespaceOnly()
 	start := l.position
@@ -191,7 +214,8 @@ func (l *scanner) nextToken() Token {
 		tok.Type = String
 		l.readString()
 	case 'u', 'U':
-		if l.matchKeyword("url(") {
+		// After a digit, "url" is a dimension's unit and "(" opens a block.
+		if l.matchKeyword("url(") && !l.quotedURL() && (l.position == 0 || !isDigit[l.input[l.position-1]]) {
 			tok.Type = URI
 			l.readURL()
 		} else {
@@ -273,14 +297,16 @@ func (l *scanner) handleDash() Type {
 
 func (l *scanner) readString() {
 	delimiter := l.ch
-	for l.peekChar() != delimiter && l.peekChar() != 0 && l.peekChar() != '\n' {
-		if l.peekChar() == backslash {
+	for l.peekChar() != delimiter && l.peekChar() != 0 && !isNewline(l.peekChar()) {
+		l.readChar()
+		if l.ch == backslash && isNewline(l.peekChar()) {
 			l.readChar()
-			if l.peekChar() == delimiter {
+			if l.ch == '\r' && l.peekChar() == '\n' {
 				l.readChar()
 			}
+		} else if l.ch == backslash && l.peekChar() != 0 {
+			l.readEscapedChar()
 		}
-		l.readChar()
 	}
 	if l.peekChar() == delimiter {
 		l.readChar()
@@ -315,10 +341,13 @@ func (l *scanner) readEscapedChar() {
 		for n := 0; isHexDigit[l.peekChar()] && n < 6; n++ {
 			l.readChar()
 		}
-		if l.peekChar() == ' ' {
+		if isWhitespace[l.peekChar()] {
 			l.readChar()
+			if l.ch == '\r' && l.peekChar() == '\n' {
+				l.readChar()
+			}
 		}
-	} else if l.peekChar() != '\n' {
+	} else if !isNewline(l.peekChar()) {
 		l.readChar()
 	}
 }
@@ -354,48 +383,25 @@ func (l *scanner) readComment() {
 		}
 	}
 }
+func isNewline(c byte) bool { return c == '\n' || c == '\r' || c == '\f' }
+
+func (l *scanner) quotedURL() bool {
+	i := l.position + len("url(")
+	for i < len(l.input) && isWhitespace[l.input[i]] {
+		i++
+	}
+	return i < len(l.input) && (l.input[i] == '"' || l.input[i] == '\'')
+}
 func (l *scanner) readURL() {
 	for i := 0; i < len("url("); i++ {
 		l.readChar()
 	}
-	depth := 1
-	var quote byte
-	for l.ch != endOfFile {
-		if quote != 0 {
-			if l.ch == backslash {
-				l.readChar()
-				if l.ch != endOfFile {
-					l.readChar()
-				}
-				continue
-			}
-			if l.ch == quote {
-				quote = 0
-			}
-			l.readChar()
-			continue
+	// Both URL tokens and bad-URL remnants end at the first unescaped ')'.
+	for l.ch != endOfFile && l.ch != ')' {
+		if l.ch == backslash && l.peekChar() != endOfFile {
+			l.readEscapedChar()
 		}
-		switch l.ch {
-		case '"', '\'':
-			quote = l.ch
-			l.readChar()
-		case backslash:
-			l.readChar()
-			if l.ch != endOfFile {
-				l.readChar()
-			}
-		case '(':
-			depth++
-			l.readChar()
-		case ')':
-			depth--
-			if depth == 0 {
-				return
-			}
-			l.readChar()
-		default:
-			l.readChar()
-		}
+		l.readChar()
 	}
 }
 func (l *scanner) matchKeyword(keyword string) bool {

@@ -6,21 +6,23 @@ func (p *parser) emitSelectorParts(start, end int) {
 	for end > start && p.toks[end-1].Type == lexer.Comment {
 		end--
 	}
-	var prevEnd uint32
+	var prevEnd uint32 // end of the last component; 0 until there is one
 	space := -1
 	for i := start; i < end; i++ {
 		t := p.toks[i]
-		if i > start && t.Start > prevEnd && t.Type != lexer.Comma && t.Type != lexer.RBrace && t.Type != lexer.LBrace {
+		if prevEnd != 0 && t.Type != lexer.Comment && t.Start > prevEnd && sourceHasSpace(p.src[prevEnd:t.Start]) && t.Type != lexer.Comma && t.Type != lexer.RBrace && t.Type != lexer.LBrace {
 			if space != len(p.s.nodes)-1 {
-				space = int(p.leaf(KindSelCombinator, prevEnd, t.Start, 0, 0))
+				lo := prevEnd + uint32(sourceSpaceIndex(p.src[prevEnd:t.Start]))
+				space = int(p.leaf(KindSelCombinator, lo, lo+1, 0, 0))
 			}
 		}
 		switch t.Type {
 		case lexer.Dot:
-			if i+1 < end && p.toks[i+1].Type == lexer.Ident {
-				p.leaf(KindSelClass, t.Start, p.toks[i+1].End, 0, 0)
-				prevEnd = p.toks[i+1].End
-				i++
+			// Comments are not tokens, so ".", a comment and a name are still a class.
+			if j := p.nextNonComment(i+1, end); j < end && p.toks[j].Type == lexer.Ident {
+				p.leaf(KindSelClass, t.Start, p.toks[j].End, 0, 0)
+				prevEnd = p.toks[j].End
+				i = j
 			} else {
 				p.leaf(KindSelCombinator, t.Start, t.End, 0, 0)
 				prevEnd = t.End
@@ -38,25 +40,18 @@ func (p *parser) emitSelectorParts(start, end int) {
 			p.leaf(KindSelID, t.Start, t.End, 0, 0)
 			prevEnd = t.End
 		case lexer.Colon, lexer.DblColon:
-			if i+1 < end && p.toks[i+1].Type == lexer.Ident {
-				name := p.toks[i+1]
-				if i+2 < end && p.toks[i+2].Type == lexer.LParen {
+			if j := p.nextNonComment(i+1, end); j < end && p.toks[j].Type == lexer.Ident {
+				name := p.toks[j]
+				if j+1 < end && p.toks[j+1].Type == lexer.LParen && p.toks[j+1].Start == name.End {
 					pid := p.beginAt(KindSelPseudo, t.Start)
 					p.s.nodes[pid].Aux = uint16(name.End - t.Start)
-					i += 3
+					last, closed := p.componentEnd(j+1, end, false)
+					i = j + 2
 					argStart := i
-					depth := 1
-					for i < end && depth > 0 {
-						if p.toks[i].Type == lexer.LParen {
-							depth++
-						} else if p.toks[i].Type == lexer.RParen {
-							depth--
-						}
-						if depth > 0 {
-							i++
-						}
-					}
-					if depth > 0 {
+					i = last
+					if closed {
+						i--
+					} else {
 						p.err(p.toks[argStart-1], "expected ')' to close functional pseudo")
 					}
 					if pseudoHasSelectorArgs(name.Literal(p.src)) {
@@ -76,7 +71,7 @@ func (p *parser) emitSelectorParts(start, end int) {
 				} else {
 					p.leaf(KindSelPseudo, t.Start, name.End, uint16(name.End-t.Start), 0)
 					prevEnd = name.End
-					i++
+					i = j
 				}
 			} else {
 				p.leaf(KindSelPseudo, t.Start, t.End, 0, 0)
@@ -91,18 +86,15 @@ func (p *parser) emitSelectorParts(start, end int) {
 				p.leaf(KindSelElement, t.Start, t.End, 0, 0)
 				prevEnd = t.End
 			}
+		case lexer.LParen:
+			last, _ := p.componentEnd(i, end, false)
+			p.leaf(KindPreludeRaw, t.Start, p.toks[last-1].End, 0, 0)
+			prevEnd = p.toks[last-1].End
+			i = last - 1
 		case lexer.LBracket:
-			lo := t.Start
-			hi := t.End
-			closed := false
-			for i+1 < end {
-				i++
-				hi = p.toks[i].End
-				if p.toks[i].Type == lexer.RBracket {
-					closed = true
-					break
-				}
-			}
+			last, closed := p.componentEnd(i, end, false)
+			lo, hi := t.Start, p.toks[last-1].End
+			i = last - 1
 			if !closed {
 				p.err(t, "expected ']' to close attribute selector")
 			}
@@ -132,7 +124,10 @@ func (p *parser) emitSelectorParts(start, end int) {
 		case lexer.Ampersand:
 			p.leaf(KindSelNesting, t.Start, t.End, 0, 0)
 			prevEnd = t.End
+		case lexer.Comment:
+			continue
 		default:
+			p.leaf(KindPreludeRaw, t.Start, t.End, 0, 0)
 			prevEnd = t.End
 		}
 	}
