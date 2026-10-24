@@ -5,8 +5,10 @@ import "github.com/builtwithtofu/pristinecss/internal/lexer"
 func (p *parser) parseAtRule(depth int) {
 	at := p.advance()
 	name := p.cur()
-	if name.Type != lexer.Ident {
-		p.err(at, "expected at-rule name after '@', found %s", name.Type)
+	if name.Type != lexer.Ident || name.Start != at.End {
+		p.err(at, "expected at-rule name immediately after '@', found %s", name.Type)
+		p.pos--
+		p.parseStyleRule(depth)
 		return
 	}
 	p.advance()

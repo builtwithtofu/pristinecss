@@ -1,0 +1,6 @@
+[
+  "background-image:url(foo)",
+  "background-image:url(foo",
+  "background-image:url()",
+  "background-image:url("
+]

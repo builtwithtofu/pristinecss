@@ -12,3 +12,14 @@ func TestSelectorCommentBetweenWhitespace(t *testing.T) {
 		t.Fatalf("emitted = %q", got)
 	}
 }
+
+func TestCompoundSelectorComment(t *testing.T) {
+	s, errs := Parse([]byte(".a/*x*/.c{color:red}"))
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	if got := string(s.Emit(nil, EmitOptions{})); got != ".a.c{color:red}" {
+		t.Fatalf("emitted = %q", got)
+	}
+	assertStructuralRoundTrip(t, s)
+}
