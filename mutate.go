@@ -51,7 +51,8 @@ func (s *Sheet) ReplaceRaw(id NodeID, text []byte) {
 // Compact rebuilds the node array and scratch storage, dropping tombstones, superseded
 // replacements, and raw-node descendants while physically splicing unwrapped block children.
 // It returns an old-to-new ID remap; NodeIDs are stable across all other mutations and
-// unstable after Compact.
+// unstable after Compact. Compact rewrites the node array in place, so a slice returned
+// by Nodes before Compact no longer holds the old nodes afterwards.
 func (s *Sheet) Compact() []NodeID {
 	remap := make([]NodeID, len(s.nodes))
 	for i := range remap {
@@ -63,7 +64,8 @@ func (s *Sheet) Compact() []NodeID {
 		s.scratch = nil
 		return remap
 	}
-	out := make([]Node, 0, len(oldNodes))
+	// Output never overtakes unread input: compaction only removes nodes.
+	out := oldNodes[:0]
 	var newScratch []byte
 	var copyNode func(NodeID) NodeID
 	copyNode = func(id NodeID) NodeID {
@@ -74,8 +76,11 @@ func (s *Sheet) Compact() []NodeID {
 		if n.Flags&FlagUnwrap != 0 {
 			if b, ok := s.blockChildIn(oldNodes, id); ok {
 				first := NodeID(len(out))
-				for c := b + 1; c < b+NodeID(oldNodes[b].Sub); c += NodeID(oldNodes[c].Sub) {
+				end := b + NodeID(oldNodes[b].Sub)
+				for c := b + 1; c < end; {
+					next := c + NodeID(oldNodes[c].Sub)
 					copyNode(c)
+					c = next
 				}
 				return first
 			}
@@ -92,13 +97,12 @@ func (s *Sheet) Compact() []NodeID {
 			return newID
 		}
 		end := id + NodeID(n.Sub)
-		for c := id + 1; c < end; c += NodeID(oldNodes[c].Sub) {
+		for c := id + 1; c < end; {
+			next := c + NodeID(oldNodes[c].Sub)
 			copyNode(c)
+			c = next
 		}
 		out[newID].Sub = uint32(len(out)) - uint32(newID)
-		if out[newID].Sub == 0 {
-			out[newID].Sub = 1
-		}
 		return newID
 	}
 	if len(oldNodes) > 0 {
