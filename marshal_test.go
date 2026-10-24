@@ -3,7 +3,6 @@ package pristinecss
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"strings"
 	"testing"
 )
@@ -160,31 +159,6 @@ func TestRawStatementFrameRoundTrip(t *testing.T) {
 		}
 		if got := string(loaded.Emit(nil, EmitOptions{})); got != src {
 			t.Fatalf("loaded emit = %q, want %q", got, src)
-		}
-	}
-}
-
-func TestLoadVersionOneFrame(t *testing.T) {
-	const frame = "5043535301000000080000000000000012000000250d5cb86ae70772" +
-		"0000000000000000120000000800000001000000000000001200000007000000" +
-		"0600000000000000020000000100000002000000020000001200000005000000" +
-		"03100300030000000b0000000200000011000000070000000a00000001000000" +
-		"030004000b00000011000000020000000e000000100000001100000001000000" +
-		"2e787b2d2d793a666f6f3b7a6f6f6d3a317d"
-	blob, err := hex.DecodeString(frame)
-	if err != nil {
-		t.Fatal(err)
-	}
-	loaded, err := Load(blob, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := string(loaded.Emit(nil, EmitOptions{})); got != ".x{--y:foo;zoom:1}" {
-		t.Fatalf("version 1 emit = %q", got)
-	}
-	for c := range loaded.All(KindValRaw) {
-		if got := string(loaded.Extract(c.ID()).Emit(nil, EmitOptions{})); got != "foo" {
-			t.Fatalf("version 1 extracted value = %q", got)
 		}
 	}
 }

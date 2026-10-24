@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"hash/fnv"
+	"hash/crc64"
 )
 
 const frameVersion uint16 = 1
@@ -291,4 +291,8 @@ func readHeader(blob []byte) (kind byte, a, b, c uint32, sum uint64, err error) 
 	sum = binary.LittleEndian.Uint64(blob[20:])
 	return
 }
-func checksum(b []byte) uint64 { h := fnv.New64a(); _, _ = h.Write(b); return h.Sum64() }
+
+var checksumTable = crc64.MakeTable(crc64.ECMA)
+
+// checksum is CRC-64/ECMA over source and emitted-CSS bytes.
+func checksum(b []byte) uint64 { return crc64.Checksum(b, checksumTable) }
