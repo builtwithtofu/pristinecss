@@ -135,40 +135,6 @@ func TestDescendantAfterFunctionalPseudoComment(t *testing.T) {
 	}
 }
 
-func TestTopLevelLegacyHacksIR(t *testing.T) {
-	for _, tc := range []struct {
-		src   string
-		spans []string
-	}{
-		{"*display:inline;", []string{"*display:inline;"}},
-		{"*display:inline}.a{color:red}", []string{"*display:inline;", ".a{color:red}"}},
-		{".a{color:red}*display:inline;.b{color:blue}", []string{".a{color:red}", "*display:inline;", ".b{color:blue}"}},
-	} {
-		t.Run(tc.src, func(t *testing.T) {
-			s, _ := Parse([]byte(tc.src))
-			blob, err := s.CompileIR(nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			ir, err := LoadIR(blob)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var spans []string
-			for _, r := range ir.Rules {
-				spans = append(spans, string(ir.CSS[r.Lo:r.Hi]))
-			}
-			if !reflect.DeepEqual(spans, tc.spans) {
-				t.Fatalf("IR spans = %q, want %q", spans, tc.spans)
-			}
-			want := string(s.Emit(nil, EmitOptions{}))
-			if got := string(FilterIR(ir, [4]uint64{}, nil)); got != want {
-				t.Fatalf("IR = %q, want %q", got, want)
-			}
-		})
-	}
-}
-
 func TestReplaceRawStatementSeparators(t *testing.T) {
 	for _, tc := range []struct {
 		name, src, replacement, minified, pretty string
@@ -192,7 +158,7 @@ func TestReplaceRawStatementSeparators(t *testing.T) {
 			s.ReplaceRaw(raw, []byte(tc.replacement))
 			for _, format := range []struct {
 				name  string
-				style Style
+				style EmitStyle
 				want  string
 			}{{"minified", Minified, tc.minified}, {"pretty", Pretty, tc.pretty}} {
 				t.Run(format.name, func(t *testing.T) {
@@ -225,7 +191,7 @@ func TestExtractRawCustomPropertyValue(t *testing.T) {
 			s.ReplaceRaw(value, []byte(want))
 		}
 		extracted := s.Extract(value)
-		for _, style := range []Style{Minified, Pretty} {
+		for _, style := range []EmitStyle{Minified, Pretty} {
 			if got := string(extracted.Emit(nil, EmitOptions{Style: style})); got != want {
 				t.Errorf("replace=%v: extracted value = %q, want %q", replace, got, want)
 			}

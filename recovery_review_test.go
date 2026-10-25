@@ -132,10 +132,6 @@ func TestRecoveryCommentInsideSimpleSelector(t *testing.T) {
 // descendant combinator, and every node must stay inside its parent.
 func TestRecoveryLeadingCommentInSelectorArgument(t *testing.T) {
 	for _, src := range []string{"a {color:red}:is(/*x*/b){}", ":is(/**/ .a){}"} {
-		s, _ := Parse([]byte(src))
-		if _, err := Load(s.Marshal(true), nil); err != nil {
-			t.Errorf("%q: Load(Marshal) = %v", src, err)
-		}
 		if got := inspectErrorInput(errorInput{src: []byte(src)}); len(got.details) > 0 {
 			t.Errorf("%q: %v", src, got.details)
 		}

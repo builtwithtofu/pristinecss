@@ -1,6 +1,6 @@
 # pristinecss
 
-pristinecss is a Go library for parsing, inspecting, transforming, emitting, and embedding CSS. It stores each stylesheet as a flat pre-order array of 16-byte pointer-free nodes, so rules and values can be walked by dense `NodeID`, shared between goroutines when immutable, and serialized into generated code.
+pristinecss is a Go library for parsing, inspecting, transforming, emitting, and embedding CSS. Editable sheets use a flat pre-order array of 16-byte pointer-free nodes. Read-only styles embed the original CSS, a sparse rule/declaration index, and ready-made output in a binary string constant.
 
 ## Quickstart
 
@@ -23,17 +23,26 @@ fmt.Printf("%s\n", out)
 
 ## Ownership and concurrency
 
-`Parse`, `ParseInto`, and `Load` borrow their source buffer: the caller must not mutate or free it while the `Sheet` or any `Extract`ed child lives. Use `ExtractOwned` or `Marshal(includeSrc=true)` when a result must outlive the original bytes.
+`Parse` and `ParseInto` borrow their source buffer: the caller must not mutate or free it while the `Sheet` or any `Extract`ed child lives. Use `ExtractOwned` when a result must outlive the original bytes. Binary `Style` values are immutable and safe to share across goroutines. `Load` copies its input; `Open` borrows an immutable string.
 
 A sheet with no mutator ever called is safe for unlimited concurrent readers. Mutators (`Delete`, `Unwrap`, `ReplaceRaw`, `Compact`) require exclusive access.
 
 ## Variants are data
 
-Emission takes a `Style` value instead of a formatter interface. `Minified` is the zero-whitespace style; `Pretty` injects indentation and separator bytes. `EmitOptions.Filter` skips block children in O(1), and `EmitOptions.OnRule` reports top-level output spans for IR compilation.
+Emission takes an `EmitStyle` value instead of a formatter interface. `Minified` is the zero-whitespace style; `Pretty` injects indentation and separator bytes. `EmitOptions.Filter` skips block children in O(1).
 
 ## Embedding
 
-`Marshal` stores an AST frame. `CompileIR` stores minified CSS plus per-rule `[4]uint64` masks for selection-time filtering with `FilterIR`. Both use the same `PCSS` versioned frame and reject newer blob versions with a regeneration-oriented error.
+`ToBinary(css)` returns a read-only spans binary and the same diagnostics as `Parse`. It retains the exact source and precomputes minified and pretty output. Generate a Go string constant with `fmt.Fprintf(w, "const App = %q\n", bin)`.
+
+```go
+app := pristinecss.Open(styles.App) // trusted binary constant; no validation or copy
+out := app.CSS(dst, pristinecss.Modern) // minified; reuses dst
+pretty := app.CSS(dst[:0], pristinecss.Modern, pristinecss.Pretty)
+source := app.Source() // exact original CSS
+```
+
+Use `Load(bytes)` for untrusted binaries: it checks the binary's structure and a checksum over all of it, and owns a copy. The checksum catches accidental damage, not deliberate tampering. `Open` is only for binaries built by your own program. `CSS` accepts only the `Minified` and `Pretty` presets, not custom whitespace settings. Lowering is not implemented yet.
 
 ## Architecture
 

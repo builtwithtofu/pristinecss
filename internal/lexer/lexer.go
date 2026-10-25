@@ -413,21 +413,3 @@ func (l *scanner) skipWhitespaceOnly() {
 		l.readChar()
 	}
 }
-func (l *scanner) skipWhitespaceAndComments() {
-	for {
-		for isWhitespace[l.ch] {
-			l.spaceBefore = true
-			l.readChar()
-		}
-		if l.ch == slash && l.peekChar() == '*' {
-			l.spaceBefore = true
-			l.readChar()
-			l.readComment()
-			if l.ch != endOfFile {
-				l.readChar()
-			}
-			continue
-		}
-		return
-	}
-}

@@ -79,29 +79,6 @@ func TestCompactReclaimsScratch(t *testing.T) {
 	}
 }
 
-func TestReplaceRawTopLevelRuleRemainsInIR(t *testing.T) {
-	s, _ := Parse([]byte("a{color:red}"))
-	var rule NodeID
-	for c := range s.All(KindStyleRule) {
-		rule = c.ID()
-	}
-	s.ReplaceRaw(rule, []byte("x{color:blue}"))
-	blob, err := s.CompileIR(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ir, err := LoadIR(blob)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(ir.Rules) != 1 {
-		t.Fatalf("IR rules = %d, want 1", len(ir.Rules))
-	}
-	if got := string(FilterIR(ir, [4]uint64{}, nil)); got != "x{color:blue}" {
-		t.Fatalf("filtered IR = %q", got)
-	}
-}
-
 func TestRootMutationsAffectWholeSheet(t *testing.T) {
 	t.Run("replace", func(t *testing.T) {
 		s, _ := Parse([]byte("a{color:red}"))
@@ -115,11 +92,6 @@ func TestRootMutationsAffectWholeSheet(t *testing.T) {
 		assertEmit("replace", s)
 		s.Compact()
 		assertEmit("compact", s)
-		loaded, err := Load(s.Marshal(true), nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		assertEmit("load", loaded)
 	})
 	t.Run("delete", func(t *testing.T) {
 		s, _ := Parse([]byte("a{color:red}"))
@@ -129,13 +101,6 @@ func TestRootMutationsAffectWholeSheet(t *testing.T) {
 		}
 		s.Compact()
 		verify(t, s)
-		loaded, err := Load(s.Marshal(true), nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := loaded.Emit(nil, EmitOptions{}); len(got) != 0 {
-			t.Fatalf("loaded deleted root emit = %q", got)
-		}
 	})
 	t.Run("unwrap", func(t *testing.T) {
 		s, _ := Parse([]byte("a{color:red}"))
@@ -148,7 +113,7 @@ func TestRootMutationsAffectWholeSheet(t *testing.T) {
 	})
 }
 
-func TestNestedReplacementSurvivesCompactAndMarshal(t *testing.T) {
+func TestNestedReplacementSurvivesCompact(t *testing.T) {
 	s, _ := Parse([]byte("@media screen and (min-width:1px){a{color:red}}"))
 	var feature NodeID = NoNode
 	for c := range s.All(KindMediaFeature) {
@@ -162,13 +127,6 @@ func TestNestedReplacementSurvivesCompactAndMarshal(t *testing.T) {
 	s.Compact()
 	if got := string(s.Emit(nil, EmitOptions{})); got != want {
 		t.Fatalf("compact emit = %q", got)
-	}
-	loaded, err := Load(s.Marshal(true), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := string(loaded.Emit(nil, EmitOptions{})); got != want {
-		t.Fatalf("load emit = %q", got)
 	}
 }
 
