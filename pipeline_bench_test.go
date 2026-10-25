@@ -140,7 +140,7 @@ func BenchmarkPipeline(b *testing.B) {
 				benchmarkBytes = dst
 			})
 		}
-		blob, _ := ToBinary(src)
+		blob, _ := ToBinary(src, Options{})
 		text := string(blob)
 		opened := Open(text)
 		b.Run("Open", func(b *testing.B) {
@@ -189,7 +189,7 @@ func BenchmarkPipeline(b *testing.B) {
 				benchmarkWork += len(fresh.Compact())
 				benchmarkBytes = fresh.Emit(nil, EmitOptions{Style: Minified})
 				benchmarkBytes = fresh.Emit(nil, EmitOptions{Style: Pretty})
-				blob, _ := ToBinary(benchmarkBytes)
+				blob, _ := ToBinary(benchmarkBytes, Options{})
 				compiled, err := Load(blob)
 				if err != nil {
 					b.Fatal(err)

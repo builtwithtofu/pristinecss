@@ -24,9 +24,9 @@ func checkStyle(t *testing.T, src []byte) {
 	wantSource := string(src)
 	wantMin := s.Emit(nil, EmitOptions{Style: Minified})
 	wantPretty := s.Emit(nil, EmitOptions{Style: Pretty})
-	blob, diags := ToBinary(src)
-	if !reflect.DeepEqual(diags, errs) {
-		t.Fatalf("diagnostics = %v, want %v", diags, errs)
+	blob, report := ToBinary(src, Options{})
+	if !reflect.DeepEqual(report.Errors, errs) {
+		t.Fatalf("diagnostics = %v, want %v", report.Errors, errs)
 	}
 	opened := Open(string(blob))
 	loaded, err := Load(blob)
@@ -78,7 +78,7 @@ func TestStyleDeclarationIndex(t *testing.T) {
 	check := func(t *testing.T, src []byte) {
 		t.Helper()
 		s, _ := Parse(src)
-		blob, _ := ToBinary(src)
+		blob, _ := ToBinary(src, Options{})
 		if _, err := Load(blob); err != nil {
 			t.Fatal(err)
 		}
@@ -156,7 +156,7 @@ func TestStyleDeclarationIndex(t *testing.T) {
 }
 
 func TestStyleCorruption(t *testing.T) {
-	blob, _ := ToBinary([]byte("/*! hi */ @media screen{a{color:red!important;--x:10px}}"))
+	blob, _ := ToBinary([]byte("/*! hi */ @media screen{a{color:red!important;--x:10px}}"), Options{})
 	for i := range blob {
 		for bit := range 8 {
 			blob[i] ^= 1 << bit
@@ -211,7 +211,7 @@ func TestLoadStructure(t *testing.T) {
 			}
 		})
 	}
-	base, _ := ToBinary([]byte("a{}"))
+	base, _ := ToBinary([]byte("a{}"), Options{})
 	for _, off := range []int{4, 8, 12, 16, 20} {
 		b := bytes.Clone(base)
 		binary.LittleEndian.PutUint32(b[off:], ^uint32(0))
@@ -223,24 +223,27 @@ func TestLoadStructure(t *testing.T) {
 }
 
 func TestStyleConcurrent(t *testing.T) {
-	blob, _ := ToBinary([]byte("@media screen{a{color:red}}"))
+	const src = "@media screen{a{inset:1px;color:oklch(0 0 0)}}"
+	blob, _ := ToBinary([]byte(src), Options{Lower: []Target{Chrome.At("49"), Chrome.At("90")}, MinFidelity: Approximate})
 	loaded, err := Load(blob)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, s := range []*Style{Open(string(blob)), loaded} {
-		wantMin, wantPretty := s.CSS(nil, Modern), s.CSS(nil, Modern, Pretty)
 		var wg sync.WaitGroup
-		for range 8 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for range 100 {
-					if !bytes.Equal(s.CSS(nil, Modern), wantMin) || !bytes.Equal(s.CSS(nil, Modern, Pretty), wantPretty) || s.Source() != "@media screen{a{color:red}}" {
-						t.Error("concurrent output differs")
+		for _, caps := range []Caps{Modern, Browser(Chrome, "90"), Browser(Chrome, "49")} {
+			wantMin, wantPretty, wantKey := s.CSS(nil, caps), s.CSS(nil, caps, Pretty), s.Key(caps)
+			for range 8 {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					for range 100 {
+						if !bytes.Equal(s.CSS(nil, caps), wantMin) || !bytes.Equal(s.CSS(nil, caps, Pretty), wantPretty) || s.Source() != src || s.Key(caps) != wantKey {
+							t.Error("concurrent output differs")
+						}
 					}
-				}
-			}()
+				}()
+			}
 		}
 		wg.Wait()
 	}
@@ -248,23 +251,27 @@ func TestStyleConcurrent(t *testing.T) {
 
 func FuzzLoad(f *testing.F) {
 	for _, path := range []string{"test-data/frameworks/milligram.css", "test-data/corpus/pure-0.6.0.min.css"} {
-		blob, _ := ToBinary(readCSS(f, path))
+		blob, _ := ToBinary(readCSS(f, path), Options{})
 		f.Add(blob)
 	}
 	for _, src := range []string{"", "a{color:red}", "@media screen{a{--x:1}}"} {
-		blob, _ := ToBinary([]byte(src))
+		blob, _ := ToBinary([]byte(src), Options{})
 		f.Add(blob)
 	}
+	capsValues := []Caps{Modern, Caps{}, Browser(Chrome, "49"), Browser(Chrome, "90"), Browser(Safari, "12"), Browser(Safari, "15.2"), CapsFromBits([4]uint64{1 << CapOklch})}
 	f.Fuzz(func(t *testing.T, b []byte) {
-		generated, _ := ToBinary(b)
+		generated, _ := ToBinary(b, Options{})
 		if _, err := Load(generated); err != nil {
 			t.Fatalf("Load rejected ToBinary output for %q: %v", b, err)
 		}
 		check := func(b []byte) {
 			if s, err := Load(b); err == nil {
 				_ = s.Source()
-				_ = s.CSS(nil, Modern)
-				_ = s.CSS(nil, Modern, Pretty)
+				for _, caps := range capsValues {
+					_ = s.CSS(nil, caps)
+					_ = s.CSS(nil, caps, Pretty)
+					_ = s.Key(caps)
+				}
 			}
 		}
 		check(b)
