@@ -27,7 +27,7 @@ func (p *parser) parseDeclaration() {
 	if !custom {
 		last := p.previousNonComment(valueEnd)
 		bang := p.previousNonComment(last)
-		if last >= valueStart && bang >= valueStart && p.toks[bang].Type == lexer.Exclamation && bytes.EqualFold(p.toks[last].Literal(p.src), []byte("important")) && p.valueTokenIsTopLevel(valueStart, bang) {
+		if last >= valueStart && bang >= valueStart && p.toks[bang].Type == lexer.Exclamation && p.toks[last].Type == lexer.Ident && cssNameEqual(string(p.toks[last].Literal(p.src)), "important") && p.valueTokenIsTopLevel(valueStart, bang) {
 			important = true
 			valueEnd = bang
 		}
