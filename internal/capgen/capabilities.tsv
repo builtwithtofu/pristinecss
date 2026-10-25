@@ -1,0 +1,175 @@
+# Stable wire number, Go name, web-features ID, BCD keys.
+# Append only. Never renumber or reuse a number, including a retired capability.
+# * uses all compat_features of the named web-feature. Explicit keys define the
+# CSS surface of narrower capabilities, not unrelated CSSOM or later subfeatures.
+# - means no mapping/data. Baseline uses per-key low dates, or feature dates for *.
+0 CapInset logical-properties css.properties.inset
+1 CapOklch oklab css.types.color.oklch
+2 CapOklab oklab css.types.color.oklab
+3 CapHexAlpha rgb css.types.color.rgb_hexadecimal_notation.alpha_hexadecimal_notation
+4 CapSpaceRGB rgb css.types.color.rgb.space_separated_parameters
+5 CapSpaceHSL hsl css.types.color.hsl.space_separated_parameters
+6 CapHwb hwb css.types.color.hwb
+7 CapLab lab css.types.color.lab
+8 CapLch lab css.types.color.lch
+9 CapColorFunction color-function css.types.color.color
+10 CapColorMix color-mix css.types.color.color-mix
+11 CapRelativeColor relative-color *
+12 CapAlpha alpha *
+13 CapLightDark light-dark *
+14 CapLightDarkImage light-dark-image *
+15 CapCurrentColor currentcolor css.types.color.currentcolor
+16 CapTransparent color css.types.color.transparent
+17 CapSystemColors system-color css.types.color.system-color
+18 CapRebeccaPurple named-color css.types.color.named-color.rebeccapurple
+19 CapNesting nesting css.selectors.nesting
+20 CapNestedDeclarations nesting api.CSSNestedDeclarations
+21 CapIs is css.selectors.is
+22 CapWhere where css.selectors.where
+23 CapNotList not css.selectors.not.selector_list
+24 CapHas has css.selectors.has
+25 CapFocusVisible focus-visible css.selectors.focus-visible
+26 CapFocusWithin focus-within css.selectors.focus-within
+27 CapAnyLink link-selectors css.selectors.any-link
+28 CapDir dir-pseudo css.selectors.dir
+29 CapLangList lang css.selectors.lang.argument_list
+30 CapMarker marker css.selectors.marker
+31 CapPlaceholder placeholder css.selectors.placeholder
+32 CapPlaceholderShown placeholder-shown css.selectors.placeholder-shown
+33 CapCaseInsensitiveAttributes case-insensitive-attributes css.selectors.attribute.case_insensitive_modifier
+34 CapDoubleColon before-after css.selectors.before css.selectors.after
+35 CapNthChildOf nth-child-of css.selectors.nth-child.of_syntax
+36 CapUserValid user-pseudos css.selectors.user-valid
+37 CapUserInvalid user-pseudos css.selectors.user-invalid
+38 CapFullscreen fullscreen css.selectors.fullscreen
+39 CapAutofill autofill css.selectors.autofill
+40 CapCalc calc css.types.calc
+41 CapMin min-max-clamp css.types.min
+42 CapMax min-max-clamp css.types.max
+43 CapClamp min-max-clamp css.types.clamp
+44 CapRound round-mod-rem css.types.round
+45 CapMod round-mod-rem css.types.mod
+46 CapRemFunction round-mod-rem css.types.rem
+47 CapTrig trig-functions *
+48 CapExp exp-functions *
+49 CapAbs abs-sign css.types.abs
+50 CapSign abs-sign css.types.sign
+51 CapViewportUnits viewport-units *
+52 CapDynamicViewportUnits viewport-unit-variants css.types.length.viewport_percentage_units_dynamic
+53 CapSmallViewportUnits viewport-unit-variants css.types.length.viewport_percentage_units_small
+54 CapLargeViewportUnits viewport-unit-variants css.types.length.viewport_percentage_units_large
+55 CapLogicalViewportUnits viewport-unit-variants css.types.length.vi css.types.length.vb
+56 CapRem rem css.types.length.rem
+57 CapCh ch css.types.length.ch
+58 CapIc ic css.types.length.ic
+59 CapLh lh css.types.length.lh
+60 CapRlh rlh css.types.length.rlh
+61 CapCap cap css.types.length.cap
+62 CapRcap rcap css.types.length.rcap
+63 CapRex rex css.types.length.rex
+64 CapRic ric css.types.length.ric
+65 CapContainerUnits container-queries css.types.length.container_query_length_units
+66 CapImageSet image-set css.types.image.image-set
+67 CapGradients gradients css.types.gradient.linear-gradient css.types.gradient.radial-gradient
+68 CapDoublePositionStops gradients css.types.gradient.linear-gradient.doubleposition css.types.gradient.radial-gradient.doubleposition
+69 CapConicGradient conic-gradients css.types.gradient.conic-gradient
+70 CapGradientInterpolation gradient-interpolation *
+71 CapLogicalKeywords logical-properties css.properties.float.inline-start css.properties.float.inline-end css.properties.clear.inline-start css.properties.clear.inline-end
+72 CapEnv safe-area-inset css.types.env
+73 CapCustomProperties custom-properties css.properties.custom-property css.types.var
+74 CapSystemUI font-family-system css.properties.font-family.system-ui
+75 CapLogicalBoxShorthands logical-properties css.properties.margin-inline css.properties.margin-block css.properties.padding-inline css.properties.padding-block css.properties.inset-inline css.properties.inset-block
+76 CapLogicalBoxLonghands logical-properties css.properties.margin-inline-start css.properties.margin-inline-end css.properties.margin-block-start css.properties.margin-block-end css.properties.padding-inline-start css.properties.padding-inline-end css.properties.padding-block-start css.properties.padding-block-end css.properties.inset-inline-start css.properties.inset-inline-end css.properties.inset-block-start css.properties.inset-block-end
+77 CapLogicalRadius logical-properties css.properties.border-start-start-radius css.properties.border-start-end-radius css.properties.border-end-start-radius css.properties.border-end-end-radius
+78 CapLogicalSize logical-properties css.properties.inline-size css.properties.block-size css.properties.min-inline-size css.properties.max-inline-size css.properties.min-block-size css.properties.max-block-size
+79 CapLogicalBorder logical-properties css.properties.border-inline css.properties.border-block css.properties.border-inline-start css.properties.border-inline-end css.properties.border-block-start css.properties.border-block-end
+80 CapFlexGap flexbox-gap css.properties.gap.flex_context
+81 CapGridGap grid css.properties.gap.grid_context
+82 CapPlaceItems flexbox css.properties.place-items
+83 CapPlaceSelf flexbox css.properties.place-self
+84 CapPlaceContent flexbox css.properties.place-content
+85 CapAspectRatio aspect-ratio css.properties.aspect-ratio
+86 CapTextDecorationColorStyle text-decoration css.properties.text-decoration.includes_color-and-style
+87 CapTextDecorationThickness text-decoration css.properties.text-decoration.includes_thickness
+88 CapOverflowClip overflow-clip css.properties.overflow.clip
+89 CapOverflowShorthand overflow-shorthand css.properties.overflow.multiple_keywords
+90 CapTranslate individual-transforms css.properties.translate
+91 CapRotate individual-transforms css.properties.rotate
+92 CapScale individual-transforms css.properties.scale
+93 CapTransform transforms2d css.properties.transform
+94 CapTransform3D transforms3d css.properties.transform-style
+95 CapOpacity opacity css.properties.opacity
+96 CapOpacityPercentage opacity css.properties.opacity.percentages
+97 CapClipPath clip-path css.properties.clip-path
+98 CapMask masks css.properties.mask
+99 CapBackdropFilter backdrop-filter css.properties.backdrop-filter
+100 CapUserSelect user-select css.properties.user-select
+101 CapAppearance appearance css.properties.appearance
+102 CapBackgroundClipText background-clip-text css.properties.background-clip.text
+103 CapColorScheme color-scheme css.properties.color-scheme
+104 CapTextWrapBalance text-wrap-balance css.properties.text-wrap.balance
+105 CapTextWrapPretty text-wrap-pretty css.properties.text-wrap.pretty
+106 CapHyphens hyphens css.properties.hyphens
+107 CapBoxSizing box-sizing css.properties.box-sizing
+108 CapBorderRadius border-radius css.properties.border-radius
+109 CapBoxShadow box-shadow css.properties.box-shadow
+110 CapBackgroundSize background-size css.properties.background-size
+111 CapLineClamp line-clamp css.properties.line-clamp
+112 CapPrintColorAdjust print-color-adjust css.properties.print-color-adjust
+113 CapFlowRoot display-flow-root css.properties.display.flow-root
+114 CapTwoValueDisplay two-value-display css.properties.display.multi-keyword_values
+115 CapLayer cascade-layers css.at-rules.layer
+116 CapContainerSize container-queries css.at-rules.container
+117 CapContainerStyle container-style-queries *
+118 CapMediaRange media-query-range-syntax *
+119 CapMediaOr media-queries css.at-rules.media.or_syntax
+120 CapPrefersColorScheme prefers-color-scheme css.at-rules.media.prefers-color-scheme
+121 CapPrefersReducedMotion prefers-reduced-motion css.at-rules.media.prefers-reduced-motion
+122 CapDynamicRange dynamic-range css.at-rules.media.dynamic-range
+123 CapColorGamut color-gamut css.at-rules.media.color-gamut
+124 CapCustomMedia custom-media-queries css.at-rules.custom-media
+125 CapSupports supports css.at-rules.supports
+126 CapSupportsSelector supports css.at-rules.supports.selector
+127 CapProperty registered-custom-properties css.at-rules.property
+128 CapScope scope css.at-rules.scope
+129 CapStartingStyle starting-style css.at-rules.starting-style
+130 CapFontFace font-face css.at-rules.font-face
+131 CapWoff font-face css.at-rules.font-face.WOFF
+132 CapWoff2 font-face css.at-rules.font-face.WOFF_2
+133 CapFontFormatKeyword font-face css.at-rules.font-face.src.format_keyword
+134 CapFontTech font-face css.at-rules.font-face.src.tech_keyword
+135 CapImportLayer cascade-layers css.at-rules.import.layer
+136 CapImportSupports supports css.at-rules.import.supports
+137 CapNamespace namespace css.at-rules.namespace
+138 CapCounterStyle counter-style css.at-rules.counter-style
+139 CapNestedMedia media-queries css.at-rules.media.nested-queries
+140 CapFlexbox flexbox css.properties.display.flex css.properties.flex-wrap
+141 CapGrid grid css.properties.display.grid css.properties.grid-template-columns css.properties.grid-template-rows
+142 CapSubgrid subgrid css.properties.grid-template-columns.subgrid css.properties.grid-template-rows.subgrid
+143 CapMultiColumn multi-column css.properties.columns
+144 CapSticky sticky-positioning css.properties.position.sticky
+145 CapDisplayContents display-contents css.properties.display.contents
+146 CapIf if css.types.if
+147 CapWhen - -
+148 CapFunction function css.at-rules.function
+149 CapMixin mixin -
+150 CapTypedAttr attr *
+151 CapSiblingIndex sibling-count css.types.sibling-index
+152 CapSiblingCount sibling-count css.types.sibling-count
+153 CapRandom random-function css.types.random
+154 CapProgress progress-function css.types.progress
+155 CapContrastColor contrast-color css.types.color.contrast-color
+156 CapColorContrast color-contrast -
+157 CapColorMixVariadic color-mix-variadic *
+158 CapAnchorPositioning anchor-positioning *
+159 CapFieldSizing field-sizing css.properties.field-sizing
+160 CapTextBoxTrim text-box css.properties.text-box-trim
+161 CapCornerShape corner-shape css.properties.corner-shape
+162 CapInterpolateSize interpolate-size css.properties.interpolate-size
+163 CapCalcSize calc-size css.types.calc-size
+164 CapScrollDrivenAnimations scroll-driven-animations *
+165 CapViewTransitions view-transitions css.properties.view-transition-name
+166 CapCrossDocumentViewTransitions cross-document-view-transitions css.at-rules.view-transition
+167 CapGridLanes grid-lanes css.properties.display.grid-lanes
+168 CapReadingFlow reading-flow css.properties.reading-flow
+169 CapTransitionBehavior transition-behavior css.properties.transition-behavior

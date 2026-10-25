@@ -7,12 +7,6 @@ import (
 	"strings"
 )
 
-// Caps describes output capabilities. Only Modern is supported in this version.
-type Caps uint64
-
-// Modern requests plain CSS without lowering.
-const Modern Caps = 0
-
 // Style is a read-only binary stylesheet, safe to share across goroutines.
 // Build one with ToBinary, then use Open or Load.
 type Style struct{ blob string }
