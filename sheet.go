@@ -30,8 +30,7 @@ var _ [16]byte = [unsafe.Sizeof(Node{})]byte{}
 // is a data race.
 //
 // The source buffer is borrowed: the caller must not mutate or free it while the Sheet
-// (or any extracted child) lives. Owned extraction and source-inclusive serialization
-// are the escape hatches.
+// (or any extracted child) lives. Use ExtractOwned for an independent copy.
 type Sheet struct {
 	src      []byte
 	nodes    []Node

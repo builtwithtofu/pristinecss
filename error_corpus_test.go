@@ -52,7 +52,7 @@ func inspectErrorInput(in errorInput) (out errorChecks) {
 		out.survival = true
 		out.details = append(out.details, "lost valid trailing rule "+in.wantRule)
 	}
-	for name, style := range map[string]Style{"minified": Minified, "pretty": Pretty} {
+	for name, style := range map[string]EmitStyle{"minified": Minified, "pretty": Pretty} {
 		o := EmitOptions{Style: style}
 		first := s.Emit(nil, o)
 		reparsed, reerrs := Parse(first)

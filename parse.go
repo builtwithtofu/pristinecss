@@ -90,7 +90,6 @@ func (p *parser) advance() lexer.Token {
 	}
 	return t
 }
-func (p *parser) begin(k Kind) NodeID { return p.beginAt(k, p.cur().Start) }
 func (p *parser) beginAt(k Kind, lo uint32) NodeID {
 	id := NodeID(len(p.s.nodes))
 	p.s.nodes = append(p.s.nodes, Node{Kind: k, Lo: lo})
@@ -165,8 +164,4 @@ func (p *parser) skipBalanced(stop1, stop2 lexer.Type) uint32 {
 		p.advance()
 	}
 	return end
-}
-
-func isIdentLike(t lexer.Token) bool {
-	return t.Type == lexer.Ident || t.Type == lexer.Minus || t.Type == lexer.Asterisk
 }

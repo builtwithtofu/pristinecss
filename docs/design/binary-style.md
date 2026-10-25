@@ -35,10 +35,10 @@ The caller:
 - Never a silent gap. If something can't be lowered for a target, say which rule,
   for which target, and what happened instead.
 - The binary is read-only (`Style`). Tools that change CSS use the editable tree
-  (`Sheet`). Mixing the two is what made today's binary 2.7 times the size of
-  its CSS.
-- This replaces today's AST frame (`Marshal`/`Load`) and the IR
-  (`CompileIR`/`FilterIR`).
+  (`Sheet`). Mixing the two is what made the old AST frame 2.7 times the size
+  of its CSS.
+- The spans binary is the only binary format. Step 2 removed the old AST frame
+  and the IR.
 
 ## How it is used
 
@@ -153,15 +153,18 @@ binary carries work done at build time:
 
 Prototypes, Apple M5, all 22 sheets in `test-data/`, run one at a time.
 
+Step 2 as built, Bootstrap: checked `Load` 171 µs, trusted `Open` 0.0003 µs,
+against 1,036 µs to parse the CSS text in the same run.
+
 | Ready to use | Bootstrap | All 22 |
 |---|---:|---:|
 | Parse the CSS text | 932 µs | 13.8 ms |
-| Today's `Load` | 320 µs | 4.8 ms |
+| Old AST frame's `Load` | 320 µs | 4.8 ms |
 | Trusted open, no copy | 0.03 µs | 0.001 ms |
 
 | Index design (all 22) | Size | Walk every rule | Minified out |
 |---|---:|---:|---:|
-| Today's binary | 11.0 MB | 7.0 ms | 5.4 ms |
+| Old AST frame | 11.0 MB | 7.0 ms | 5.4 ms |
 | Spans: CSS + index | 5.8 MB | 2.6 ms | 0.75 ms |
 
 | Lowering `inset` and `oklch()` | Size | Lowered | Time |
@@ -185,12 +188,6 @@ Go takes to compile very large string constants.
    agent. One idea: each capability ships with the check a browser runs to
    report it, so the caller's handshake just runs our list and sends back bits.
 
-## Known bug in today's binary
-
-The AST frame's checksum covers only the CSS text, not the parsed structure. A
-changed node passes `Load` and changes the output. Step 2 fixes it by replacing
-the format.
-
 ## Steps
 
 Each step ends with something we can measure or use.
@@ -202,9 +199,10 @@ Each step ends with something we can measure or use.
    on it.
 2. **Style v1, no lowering.** `ToBinary`, `Open`, `Load`, `Source()` and
    `CSS(dst, Modern)` in minified and pretty forms, using the spans design. The
-   checksum covers everything. Replaces `Marshal`/`Load`. Proof: every corpus
-   sheet round-trips exactly, output matches today's emitter, and it beats
-   today's numbers.
+   checksum covers everything, which fixes the old frame's checksum covering
+   only the CSS text. Removes the old AST frame and the IR. Proof: every corpus
+   sheet round-trips exactly, output matches the emitter, and it beats the old
+   frame's numbers.
 3. **Capabilities and first lowerings.** `Caps`, a few capability bits, per-rule
    capability notes, `CSS(dst, caps)` lowering `inset` and `oklch()`/`oklab()`,
    `Unlowerable`, `Key(caps)` and two or three hand-written `Target` presets.
@@ -218,8 +216,6 @@ Each step ends with something we can measure or use.
 7. **Capabilities at scale.** The capability list from Baseline data; more
    lowerings one at a time (nesting, logical properties and so on); the
    handshake model.
-8. **Remove the old IR** once step 3 covers what it did.
-
 Steps 2 to 4 are the core. Steps 5 to 7 can go in any order after that.
 
 ## Questions for Clay

@@ -22,6 +22,8 @@ func benchmarkSheets(b *testing.B, run func(*testing.B, []byte, *Sheet)) {
 var benchmarkWork int
 var benchmarkBytes []byte
 var benchmarkSheet *Sheet
+var benchmarkStyle *Style
+var benchmarkOpened Style
 
 // A lint-style consumer reads every visible kind/text and indexes named syntax.
 func benchmarkLint(s *Sheet) int {
@@ -126,7 +128,7 @@ func BenchmarkPipeline(b *testing.B) {
 		})
 		for _, style := range []struct {
 			name  string
-			style Style
+			style EmitStyle
 		}{{"EmitMinified", Minified}, {"EmitPretty", Pretty}} {
 			b.Run(style.name, func(b *testing.B) {
 				dst := s.Emit(nil, EmitOptions{Style: style.style})
@@ -138,67 +140,41 @@ func BenchmarkPipeline(b *testing.B) {
 				benchmarkBytes = dst
 			})
 		}
-		for _, owned := range []bool{false, true} {
-			name := "Bound"
-			if owned {
-				name = "Owned"
-			}
-			b.Run("Marshal"+name, func(b *testing.B) {
-				b.ReportAllocs()
-				b.ResetTimer()
-				for range b.N {
-					benchmarkBytes = s.Marshal(owned)
-				}
-			})
-			blob := s.Marshal(owned)
-			b.Run("Load"+name, func(b *testing.B) {
-				b.ReportAllocs()
-				b.ResetTimer()
-				for range b.N {
-					var err error
-					benchmarkSheet, err = Load(blob, src)
-					if err != nil {
-						b.Fatal(err)
-					}
-				}
-			})
-		}
-		b.Run("CompileIR", func(b *testing.B) {
+		blob, _ := ToBinary(src)
+		text := string(blob)
+		opened := Open(text)
+		b.Run("Open", func(b *testing.B) {
 			b.ReportAllocs()
-			b.ResetTimer()
+			for range b.N {
+				benchmarkOpened = *Open(text)
+			}
+		})
+		b.Run("Load", func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(len(src)))
 			for range b.N {
 				var err error
-				benchmarkBytes, err = s.CompileIR(nil)
+				benchmarkStyle, err = Load(blob)
 				if err != nil {
 					b.Fatal(err)
 				}
 			}
 		})
-		blob, err := s.CompileIR(nil)
-		if err != nil {
-			b.Fatal(err)
+		for _, format := range []struct {
+			name  string
+			style EmitStyle
+		}{{"CSSMinified", Minified}, {"CSSPretty", Pretty}} {
+			b.Run(format.name, func(b *testing.B) {
+				dst := opened.CSS(nil, Modern, format.style)
+				b.ReportAllocs()
+				b.SetBytes(int64(len(src)))
+				b.ResetTimer()
+				for range b.N {
+					dst = opened.CSS(dst[:0], Modern, format.style)
+				}
+				benchmarkBytes = dst
+			})
 		}
-		ir, err := LoadIR(blob)
-		if err != nil {
-			b.Fatal(err)
-		}
-		// Alternate required/fallback bits to select half the rules.
-		for i := range ir.Rules {
-			if i%2 == 0 {
-				ir.Rules[i].Required[0] = 1
-			} else {
-				ir.Rules[i].Fallback[0] = 1
-			}
-		}
-		b.Run("FilterIR", func(b *testing.B) {
-			dst := make([]byte, 0, len(ir.CSS))
-			b.ReportAllocs()
-			b.ResetTimer()
-			for range b.N {
-				dst = FilterIR(ir, [4]uint64{1}, dst[:0])
-			}
-			benchmarkBytes = dst
-		})
 		b.Run("EndToEnd", func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(src)))
@@ -213,19 +189,12 @@ func BenchmarkPipeline(b *testing.B) {
 				benchmarkWork += len(fresh.Compact())
 				benchmarkBytes = fresh.Emit(nil, EmitOptions{Style: Minified})
 				benchmarkBytes = fresh.Emit(nil, EmitOptions{Style: Pretty})
-				loaded, err := Load(fresh.Marshal(true), nil)
+				blob, _ := ToBinary(benchmarkBytes)
+				compiled, err := Load(blob)
 				if err != nil {
 					b.Fatal(err)
 				}
-				frame, err := loaded.CompileIR(nil)
-				if err != nil {
-					b.Fatal(err)
-				}
-				compiled, err := LoadIR(frame)
-				if err != nil {
-					b.Fatal(err)
-				}
-				benchmarkBytes = FilterIR(compiled, [4]uint64{}, nil)
+				benchmarkBytes = compiled.CSS(nil, Modern)
 			}
 		})
 	})

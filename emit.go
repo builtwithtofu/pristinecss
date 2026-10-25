@@ -7,21 +7,20 @@ import (
 	"github.com/builtwithtofu/pristinecss/internal/lexer"
 )
 
-// Style injects whitespace choices into Emit. The zero value is minified.
-type Style struct{ Indent, Newline, AfterColon, AfterComma, BeforeBrace, AfterBrace []byte }
+// EmitStyle injects whitespace choices into Emit. The zero value is minified.
+type EmitStyle struct{ Indent, Newline, AfterColon, AfterComma, BeforeBrace, AfterBrace []byte }
 
 // Minified is the zero-whitespace output style.
-var Minified Style
+var Minified EmitStyle
 
 // Pretty emits two-space indentation and readable separators.
-var Pretty = Style{Indent: []byte("  "), Newline: []byte("\n"), AfterColon: []byte(" "), AfterComma: []byte(" "), BeforeBrace: []byte(" "), AfterBrace: []byte("\n")}
+var Pretty = EmitStyle{Indent: []byte("  "), Newline: []byte("\n"), AfterColon: []byte(" "), AfterComma: []byte(" "), BeforeBrace: []byte(" "), AfterBrace: []byte("\n")}
 
 // EmitOptions configures Sheet.Emit.
 type EmitOptions struct {
-	Style    Style
+	Style    EmitStyle
 	Verbatim bool
 	Filter   func(Cursor) bool
-	OnRule   func(id NodeID, lo, hi int)
 }
 
 // Emit appends CSS for the sheet to dst. It performs no allocation when dst has capacity.
@@ -39,10 +38,10 @@ func (s *Sheet) Emit(dst []byte, o EmitOptions) []byte {
 	if o.Verbatim && !s.mutated && o.Filter == nil {
 		return append(dst, s.src...)
 	}
-	return s.emitChildren(dst, 1, NodeID(len(s.nodes)), o, 0, true)
+	return s.emitChildren(dst, 1, NodeID(len(s.nodes)), o, 0)
 }
 
-func (s *Sheet) emitChildren(dst []byte, start, end NodeID, o EmitOptions, depth int, top bool) []byte {
+func (s *Sheet) emitChildren(dst []byte, start, end NodeID, o EmitOptions, depth int) []byte {
 	for id := start; id < end; id += NodeID(s.nodes[id].Sub) {
 		n := s.nodes[id]
 		if n.Flags&FlagTombstone != 0 {
@@ -53,14 +52,13 @@ func (s *Sheet) emitChildren(dst []byte, start, end NodeID, o EmitOptions, depth
 		}
 		if n.Flags&FlagUnwrap != 0 {
 			if b, ok := s.blockChild(id); ok {
-				dst = s.emitChildren(dst, b+1, b+NodeID(s.nodes[b].Sub), o, depth, top)
+				dst = s.emitChildren(dst, b+1, b+NodeID(s.nodes[b].Sub), o, depth)
 			}
 			continue
 		}
 		if o.Filter != nil && !o.Filter(Cursor{s, id}) {
 			continue
 		}
-		lo := len(dst)
 		if n.Kind == KindRawStatement || n.Kind == KindDeclaration {
 			dst = appendIndent(dst, o.Style, depth)
 			switch {
@@ -75,9 +73,6 @@ func (s *Sheet) emitChildren(dst []byte, start, end NodeID, o EmitOptions, depth
 			dst = append(dst, o.Style.Newline...)
 		} else {
 			dst = s.emitNode(dst, id, o, depth)
-		}
-		if top && o.OnRule != nil && (n.Kind == KindStyleRule || n.Kind.isAtRule() || n.Kind == KindRawStatement) {
-			o.OnRule(id, lo, len(dst))
 		}
 	}
 	return dst
@@ -106,7 +101,7 @@ func (s *Sheet) emitNode(dst []byte, id NodeID, o EmitOptions, depth int) []byte
 			dst = appendSeparator(dst, o.Style.BeforeBrace)
 			dst = append(dst, '{')
 			dst = append(dst, o.Style.Newline...)
-			dst = s.emitChildren(dst, block+1, block+NodeID(s.nodes[block].Sub), o, depth+1, false)
+			dst = s.emitChildren(dst, block+1, block+NodeID(s.nodes[block].Sub), o, depth+1)
 			dst = trimTrailingSemicolon(dst)
 			dst = appendIndent(dst, o.Style, depth)
 			dst = append(dst, '}')
@@ -117,7 +112,7 @@ func (s *Sheet) emitNode(dst []byte, id NodeID, o EmitOptions, depth int) []byte
 		dst = appendSeparator(dst, o.Style.BeforeBrace)
 		dst = append(dst, '{')
 		dst = append(dst, o.Style.Newline...)
-		dst = s.emitChildren(dst, block+1, block+NodeID(s.nodes[block].Sub), o, depth+1, false)
+		dst = s.emitChildren(dst, block+1, block+NodeID(s.nodes[block].Sub), o, depth+1)
 		dst = trimTrailingSemicolon(dst)
 		dst = appendIndent(dst, o.Style, depth)
 		dst = append(dst, '}')
@@ -138,7 +133,7 @@ func (s *Sheet) emitNode(dst []byte, id NodeID, o EmitOptions, depth int) []byte
 			dst = appendSeparator(dst, o.Style.BeforeBrace)
 			dst = append(dst, '{')
 			dst = append(dst, o.Style.Newline...)
-			dst = s.emitChildren(dst, block+1, block+NodeID(s.nodes[block].Sub), o, depth+1, false)
+			dst = s.emitChildren(dst, block+1, block+NodeID(s.nodes[block].Sub), o, depth+1)
 			dst = trimTrailingSemicolon(dst)
 			dst = appendIndent(dst, o.Style, depth)
 			dst = append(dst, '}')
@@ -150,7 +145,7 @@ func (s *Sheet) emitNode(dst []byte, id NodeID, o EmitOptions, depth int) []byte
 		return dst
 	case n.Kind == KindBlock:
 		dst = append(dst, '{')
-		dst = s.emitChildren(dst, id+1, id+NodeID(n.Sub), o, depth+1, false)
+		dst = s.emitChildren(dst, id+1, id+NodeID(n.Sub), o, depth+1)
 		dst = trimTrailingSemicolon(dst)
 		return append(dst, '}')
 	case n.Kind == KindValFunction:
@@ -514,7 +509,7 @@ func (s *Sheet) hasChangesInSub(id NodeID) bool {
 	return false
 }
 
-func minifyAppend(dst, src []byte, style Style) []byte {
+func minifyAppend(dst, src []byte, style EmitStyle) []byte {
 	sp := false
 	for i := 0; i < len(src); i++ {
 		c := src[i]
@@ -632,7 +627,7 @@ func unescapedBackslash(b []byte) bool {
 func isHexDigit(c byte) bool {
 	return '0' <= c && c <= '9' || 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F'
 }
-func appendIndent(dst []byte, st Style, depth int) []byte {
+func appendIndent(dst []byte, st EmitStyle, depth int) []byte {
 	if len(st.Newline) == 0 || len(st.Indent) == 0 {
 		return dst
 	}
