@@ -51,8 +51,8 @@ func TestCapsNoAllocations(t *testing.T) {
 		capsSink = CapsFromBits(bits)
 		bitsSink = capsSink.Bits()
 		hasSink = capsSink.Has(CapInset)
-		capsSink = Browser("chrome", "120")
-		capsSink = Browser("safari", "TP")
+		capsSink = Browser(Chrome, "120")
+		capsSink = Browser(Safari, "TP")
 		capsSink = Baseline(2024)
 	}); n != 0 {
 		t.Fatalf("allocations = %g, want 0", n)
@@ -67,43 +67,54 @@ func TestBrowser(t *testing.T) {
 		cap     Cap
 		want    bool
 	}{
-		{"chrome", "49", CapInset, false},
-		{"chrome", "86.0.4240.198", CapInset, false},
-		{"chrome", "87", CapInset, true},
-		{"chrome", "87.0.0.1", CapInset, true},
-		{"chrome", "110", CapOklch, false},
-		{"chrome", "111", CapOklch, true},
-		{"and_chr", "87", CapInset, true},
-		{"edge", "86", CapInset, false},
-		{"edge", "87", CapInset, true},
-		{"firefox", "65", CapInset, false},
-		{"firefox", "66", CapInset, true},
-		{"samsung", "13.2", CapInset, false},
-		{"samsung", "14.0", CapInset, true},
-		{"safari", "14.0", CapInset, false},
-		{"safari", "14.1", CapInset, true},
-		{"ios_saf", "14.1", CapInset, false},
-		{"ios_saf", "14.5", CapInset, true},
-		{"safari", "17.3", CapScope, false},
-		{"safari", "17.4", CapScope, true},
-		{"safari", "18.6", CapScope, true},
-		{"safari", "26", CapScope, false},
-		{"safari", "26.0", CapScope, false},
-		{"safari", "26.3", CapScope, false},
-		{"safari", "26.4", CapScope, true},
-		{"ios_saf", "26.0", CapScope, false},
-		{"ios_saf", "26.4", CapScope, true},
-		{"safari", "9", CapIs, false}, // :matches() is an alias, not full :is().
-		{"safari", "14", CapIs, true},
-		{"safari", "99", CapUserSelect, false}, // Preview and prefix do not count.
-		{"ie", "11", CapFlexbox, false},        // Partial implementation.
-		{"ie", "11", CapUserSelect, false},     // Prefix only.
-		{"firefox", "27", CapFlexbox, false},   // No flex-wrap yet.
-		{"firefox", "28", CapFlexbox, true},
-		{"opera", "12.1", CapFlexbox, false}, // display:flex exists, but flex-wrap does not.
-		{"opera", "15", CapFlexbox, false},   // Full support removed, prefix only.
-		{"opera", "16", CapFlexbox, true},
-		{"chrome", "999", CapInset, true},
+		{Chrome, "49", CapInset, false},
+		{Chrome, "86.0.4240.198", CapInset, false},
+		{Chrome, "87", CapInset, true},
+		{Chrome, "87.0.0.1", CapInset, true},
+		{Chrome, "110", CapOklch, false},
+		{Chrome, "111", CapOklch, true},
+		{Chrome, "110", CapDisplayP3, false},
+		{Chrome, "111", CapDisplayP3, true},
+		{Firefox, "112", CapDisplayP3, false},
+		{Firefox, "113", CapDisplayP3, true},
+		{Safari, "10", CapDisplayP3, false},
+		{Safari, "10.1", CapDisplayP3, true},
+		{Safari, "12", CapDisplayP3, true},
+		{Safari, "14.1", CapColorFunction, false},
+		{Safari, "15", CapColorFunction, true},
+		{IOSSafari, "10.2", CapDisplayP3, false},
+		{IOSSafari, "10.3", CapDisplayP3, true},
+		{ChromeAndroid, "87", CapInset, true},
+		{Edge, "86", CapInset, false},
+		{Edge, "87", CapInset, true},
+		{Firefox, "65", CapInset, false},
+		{Firefox, "66", CapInset, true},
+		{Samsung, "13.2", CapInset, false},
+		{Samsung, "14.0", CapInset, true},
+		{Safari, "14.0", CapInset, false},
+		{Safari, "14.1", CapInset, true},
+		{IOSSafari, "14.1", CapInset, false},
+		{IOSSafari, "14.5", CapInset, true},
+		{Safari, "17.3", CapScope, false},
+		{Safari, "17.4", CapScope, true},
+		{Safari, "18.6", CapScope, true},
+		{Safari, "26", CapScope, false},
+		{Safari, "26.0", CapScope, false},
+		{Safari, "26.3", CapScope, false},
+		{Safari, "26.4", CapScope, true},
+		{IOSSafari, "26.0", CapScope, false},
+		{IOSSafari, "26.4", CapScope, true},
+		{Safari, "9", CapIs, false}, // :matches() is an alias, not full :is().
+		{Safari, "14", CapIs, true},
+		{Safari, "99", CapUserSelect, false}, // Preview and prefix do not count.
+		{IE, "11", CapFlexbox, false},        // Partial implementation.
+		{IE, "11", CapUserSelect, false},     // Prefix only.
+		{Firefox, "27", CapFlexbox, false},   // No flex-wrap yet.
+		{Firefox, "28", CapFlexbox, true},
+		{Opera, "12.1", CapFlexbox, false}, // display:flex exists, but flex-wrap does not.
+		{Opera, "15", CapFlexbox, false},   // Full support removed, prefix only.
+		{Opera, "16", CapFlexbox, true},
+		{Chrome, "999", CapInset, true},
 	} {
 		t.Run(fmt.Sprintf("%s/%s/%d", tt.id, tt.version, tt.cap), func(t *testing.T) {
 			if got := Browser(tt.id, tt.version).Has(tt.cap); got != tt.want {
@@ -118,18 +129,18 @@ func TestBrowserslistForms(t *testing.T) {
 		id               BrowserID
 		version, asPlain string
 	}{
-		{"ios_saf", "15.2-15.3", "15.2"},
-		{"firefox", "115.0esr", "115"},
-		{"firefox", "115esr", "115"},
+		{IOSSafari, "15.2-15.3", "15.2"},
+		{Firefox, "115.0esr", "115"},
+		{Firefox, "115esr", "115"},
 	} {
 		if Browser(tt.id, tt.version) != Browser(tt.id, tt.asPlain) {
 			t.Fatalf("Browser(%q, %q) differs from Browser(%q, %q)", tt.id, tt.version, tt.id, tt.asPlain)
 		}
 	}
-	if Browser("safari", "TP") != Browser("safari", "27") {
+	if Browser(Safari, "TP") != Browser(Safari, "27") {
 		t.Fatal("Safari TP should be the newest Safari version in the data (27)")
 	}
-	if Browser("safari", "TP") == (Caps{}) {
+	if Browser(Safari, "TP") == (Caps{}) {
 		t.Fatal("Safari TP is empty")
 	}
 }
@@ -141,12 +152,12 @@ func TestBrowserUnknown(t *testing.T) {
 		}
 	}
 	for _, v := range []string{"", "preview", "latest", "≤87", "87-", "-87", "87-90-91", "87-90esr", "esr", "TPX", "87beta", "-1", "+87", "87.", ".87", "87..1", "87.0.0.0.1", "65536", "87.65536", " 87", "87 ", strings.Repeat("9", 100)} {
-		if got := Browser("chrome", v); got != (Caps{}) {
+		if got := Browser(Chrome, v); got != (Caps{}) {
 			t.Fatalf("invalid version %q: %x", v, got.Bits())
 		}
 	}
 	for _, v := range []string{"87", "87.0", "87.0.0", "87.0.0.0", "087.00"} {
-		if Browser("chrome", v) != Browser("chrome", "87") {
+		if Browser(Chrome, v) != Browser(Chrome, "87") {
 			t.Fatalf("numeric equivalence: %q", v)
 		}
 	}
@@ -212,7 +223,7 @@ func TestCapWireNumbers(t *testing.T) {
 		CapColorMixVariadic, CapAnchorPositioning, CapFieldSizing, CapTextBoxTrim,
 		CapCornerShape, CapInterpolateSize, CapCalcSize, CapScrollDrivenAnimations,
 		CapViewTransitions, CapCrossDocumentViewTransitions, CapGridLanes,
-		CapReadingFlow, CapTransitionBehavior,
+		CapReadingFlow, CapTransitionBehavior, CapDisplayP3,
 	}
 	if len(caps) != len(capBaseline) {
 		t.Fatal("append new capabilities to the wire-number test")
@@ -245,7 +256,7 @@ func TestBaselineEndOfYearSupport(t *testing.T) {
 		{2026, "158", "158", "161", "27"},
 	} {
 		for id, version := range map[BrowserID]string{
-			"chrome": tt.chrome, "edge": tt.edge, "firefox": tt.firefox, "safari": tt.safari,
+			Chrome: tt.chrome, Edge: tt.edge, Firefox: tt.firefox, Safari: tt.safari,
 		} {
 			baseline, browser := Baseline(tt.year), Browser(id, version)
 			for x := range capBaseline {

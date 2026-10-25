@@ -173,3 +173,4 @@
 167 CapGridLanes grid-lanes css.properties.display.grid-lanes
 168 CapReadingFlow reading-flow css.properties.reading-flow
 169 CapTransitionBehavior transition-behavior css.properties.transition-behavior
+170 CapDisplayP3 color-function css.types.color.color

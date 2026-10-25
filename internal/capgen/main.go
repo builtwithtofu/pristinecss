@@ -58,6 +58,7 @@ type statement struct {
 	Prefix      string            `json:"prefix"`
 	Alternative string            `json:"alternative_name"`
 	Partial     bool              `json:"partial_implementation"`
+	Notes       any               `json:"notes"`
 	Flags       []json.RawMessage `json:"flags"`
 }
 
@@ -176,7 +177,7 @@ func generate(data, list string) ([]byte, error) {
 		for _, c := range caps {
 			var full []interval
 			for i, key := range c.Keys {
-				ss, err := support(bcd, key, browser.mdn)
+				ss, err := support(bcd, key, browser.mdn, c.Name == "CapDisplayP3")
 				if err != nil {
 					return nil, fmt.Errorf("%s: %w", c.Name, err)
 				}
@@ -233,7 +234,7 @@ func version(s string) (uint64, error) {
 	return v, nil
 }
 
-func support(bcd map[string]any, key, browser string) ([]interval, error) {
+func support(bcd map[string]any, key, browser string, displayP3 bool) ([]interval, error) {
 	var node any = bcd
 	for _, part := range strings.Split(key+".__compat.support", ".") {
 		m, ok := node.(map[string]any)
@@ -264,7 +265,10 @@ func support(bcd map[string]any, key, browser string) ([]interval, error) {
 	var spans []interval
 	for _, s := range statements {
 		added, ok := s.Added.(string)
-		if !ok || added == "preview" || s.Prefix != "" || s.Alternative != "" || s.Partial || len(s.Flags) != 0 {
+		// BCD's partial Safari color() implementation fully supports this
+		// narrower surface, but not CapColorFunction's other profiles.
+		partialP3 := displayP3 && key == "css.types.color.color" && s.Notes == "Only supports <code>display-p3</code> and <code>srgb</code> predefined color profiles."
+		if !ok || added == "preview" || s.Prefix != "" || s.Alternative != "" || (s.Partial && !partialP3) || len(s.Flags) != 0 {
 			continue
 		}
 		start, err := version(added)

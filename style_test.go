@@ -258,6 +258,16 @@ func FuzzLoad(f *testing.F) {
 		blob, _ := ToBinary([]byte(src), Options{})
 		f.Add(blob)
 	}
+	for _, src := range []string{
+		"a{inset:1px;color:oklch(.6 .1 30);background:oklab(.5 1 1)}",
+		"a{inset:attr(data-edges);color:oklch(var(--l) 0 0);background:oklab(1 0 0)}",
+	} {
+		blob, report := ToBinary([]byte(src), Options{Lower: []Target{Chrome.At("49"), Chrome.At("90"), Safari.At("15.2")}})
+		if report.Variants != 4 {
+			f.Fatalf("multi-variant seed has %d variants, want 4", report.Variants)
+		}
+		f.Add(blob)
+	}
 	capsValues := []Caps{Modern, Caps{}, Browser(Chrome, "49"), Browser(Chrome, "90"), Browser(Safari, "12"), Browser(Safari, "15.2"), CapsFromBits([4]uint64{1 << CapOklch})}
 	f.Fuzz(func(t *testing.T, b []byte) {
 		generated, _ := ToBinary(b, Options{})

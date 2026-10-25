@@ -191,9 +191,10 @@ const (
 	CapGridLanes                    Cap = 167
 	CapReadingFlow                  Cap = 168
 	CapTransitionBehavior           Cap = 169
+	CapDisplayP3                    Cap = 170
 )
 
-var capBaseline = [170]uint16{
+var capBaseline = [171]uint16{
 	CapInset:                     2021,
 	CapOklch:                     2023,
 	CapOklab:                     2023,
@@ -338,6 +339,7 @@ var capBaseline = [170]uint16{
 	CapFieldSizing:               2026,
 	CapTextBoxTrim:               2026,
 	CapViewTransitions:           2025,
+	CapDisplayP3:                 2023,
 }
 
 var capBrowsers = map[BrowserID][]capSupport{
@@ -503,6 +505,7 @@ var capBrowsers = map[BrowserID][]capSupport{
 		{CapCrossDocumentViewTransitions, 0x7e000000000000, 0x0},
 		{CapReadingFlow, 0x89000000000000, 0x0},
 		{CapTransitionBehavior, 0x75000000000000, 0x0},
+		{CapDisplayP3, 0x6f000000000000, 0x0},
 	},
 	"and_chr": {
 		{CapInset, 0x57000000000000, 0x0},
@@ -666,6 +669,7 @@ var capBrowsers = map[BrowserID][]capSupport{
 		{CapCrossDocumentViewTransitions, 0x7e000000000000, 0x0},
 		{CapReadingFlow, 0x89000000000000, 0x0},
 		{CapTransitionBehavior, 0x75000000000000, 0x0},
+		{CapDisplayP3, 0x6f000000000000, 0x0},
 	},
 	"edge": {
 		{CapInset, 0x57000000000000, 0x0},
@@ -831,6 +835,7 @@ var capBrowsers = map[BrowserID][]capSupport{
 		{CapCrossDocumentViewTransitions, 0x7e000000000000, 0x0},
 		{CapReadingFlow, 0x89000000000000, 0x0},
 		{CapTransitionBehavior, 0x75000000000000, 0x0},
+		{CapDisplayP3, 0x6f000000000000, 0x0},
 	},
 	"firefox": {
 		{CapInset, 0x42000000000000, 0x0},
@@ -983,6 +988,7 @@ var capBrowsers = map[BrowserID][]capSupport{
 		{CapFieldSizing, 0x98000000000000, 0x0},
 		{CapTextBoxTrim, 0x9a000000000000, 0x0},
 		{CapViewTransitions, 0x90000000000000, 0x0},
+		{CapDisplayP3, 0x71000000000000, 0x0},
 	},
 	"and_ff": {
 		{CapInset, 0x42000000000000, 0x0},
@@ -1135,6 +1141,7 @@ var capBrowsers = map[BrowserID][]capSupport{
 		{CapFieldSizing, 0x98000000000000, 0x0},
 		{CapTextBoxTrim, 0x9a000000000000, 0x0},
 		{CapViewTransitions, 0x90000000000000, 0x0},
+		{CapDisplayP3, 0x71000000000000, 0x0},
 	},
 	"safari": {
 		{CapInset, 0xe000100000000, 0x0},
@@ -1294,6 +1301,7 @@ var capBrowsers = map[BrowserID][]capSupport{
 		{CapCrossDocumentViewTransitions, 0x12000200000000, 0x0},
 		{CapGridLanes, 0x1a000400000000, 0x0},
 		{CapTransitionBehavior, 0x11000400000000, 0x0},
+		{CapDisplayP3, 0xa000100000000, 0x0},
 	},
 	"ios_saf": {
 		{CapInset, 0xe000500000000, 0x0},
@@ -1452,6 +1460,7 @@ var capBrowsers = map[BrowserID][]capSupport{
 		{CapCrossDocumentViewTransitions, 0x12000200000000, 0x0},
 		{CapGridLanes, 0x1a000400000000, 0x0},
 		{CapTransitionBehavior, 0x11000400000000, 0x0},
+		{CapDisplayP3, 0xa000300000000, 0x0},
 	},
 	"ie": {
 		{CapCurrentColor, 0x9000000000000, 0x0},
@@ -1631,6 +1640,7 @@ var capBrowsers = map[BrowserID][]capSupport{
 		{CapCrossDocumentViewTransitions, 0x1c000000000000, 0x0},
 		{CapReadingFlow, 0x1e000000000000, 0x0},
 		{CapTransitionBehavior, 0x18000000000000, 0x0},
+		{CapDisplayP3, 0x16000000000000, 0x0},
 	},
 	"opera": {
 		{CapInset, 0x49000000000000, 0x0},
@@ -1794,6 +1804,7 @@ var capBrowsers = map[BrowserID][]capSupport{
 		{CapCrossDocumentViewTransitions, 0x70000000000000, 0x0},
 		{CapReadingFlow, 0x79000000000000, 0x0},
 		{CapTransitionBehavior, 0x67000000000000, 0x0},
+		{CapDisplayP3, 0x61000000000000, 0x0},
 	},
 	"op_mob": {
 		{CapInset, 0x3e000000000000, 0x0},
@@ -1954,5 +1965,6 @@ var capBrowsers = map[BrowserID][]capSupport{
 		{CapCrossDocumentViewTransitions, 0x53000000000000, 0x0},
 		{CapReadingFlow, 0x5a000000000000, 0x0},
 		{CapTransitionBehavior, 0x4e000000000000, 0x0},
+		{CapDisplayP3, 0x4b000000000000, 0x0},
 	},
 }
