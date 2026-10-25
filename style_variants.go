@@ -10,7 +10,7 @@ import (
 // PCS2 keeps the PCS1 header, index, source and modern outputs. Before the
 // checksum it adds a u32 variant count, then entries holding required Caps
 // (four u64s), four u32s (minified offset/length, pretty offset/length), and
-// a u32 selection score (projected capability richness).
+// a u32 selection score (richness, native colour support, then P3 support).
 // Entry zero refers to the existing modern output; other outputs follow the
 // table contiguously. PCS1 is still emitted when no extra variants are needed.
 const (
@@ -34,7 +34,7 @@ func (s *Style) Key(caps Caps) Key {
 	return key
 }
 
-// Safe variants prefer richness.
+// Safe variants prefer richness, then native colour support, then P3.
 // The table's canonical capability-mask order breaks any remaining ties.
 // Unresolved expressions remain reported gaps; fidelity skips require their Cap.
 func (s *Style) variant(caps Caps, table int) uint32 {
@@ -72,6 +72,9 @@ func buildVariants(out, css []byte, spans []styleSpan, o Options, report *Report
 		}
 	}
 	used := original
+	if original.Has(CapOklch) || original.Has(CapOklab) {
+		used.bits[CapDisplayP3/64] |= uint64(1) << (CapDisplayP3 % 64)
+	}
 	targets := []Caps{used}
 	seen := make(map[Target]bool)
 	for _, target := range o.Lower {
@@ -92,12 +95,17 @@ func buildVariants(out, css []byte, spans []styleSpan, o Options, report *Report
 				gap.Target = target
 				report.Gaps = append(report.Gaps, gap)
 			}
+			for _, mapping := range w.mappings {
+				mapping.Target = target
+				report.Mappings = append(report.Mappings, mapping)
+			}
 		}
 		if !slices.Contains(targets, projected) {
 			targets = append(targets, projected)
 		}
 	}
 	slices.SortStableFunc(report.Gaps, func(a, b Gap) int { return cmp.Compare(a.Lo, b.Lo) })
+	slices.SortStableFunc(report.Mappings, func(a, b Mapping) int { return cmp.Compare(a.Lo, b.Lo) })
 	slices.SortFunc(targets[1:], func(a, b Caps) int {
 		for word := 3; word >= 0; word-- {
 			if order := cmp.Compare(a.bits[word], b.bits[word]); order != 0 {
@@ -133,6 +141,9 @@ func buildVariants(out, css []byte, spans []styleSpan, o Options, report *Report
 				needed.bits[cap/64] |= uint64(1) << (cap % 64)
 			}
 			if len(w.edits) != 0 {
+				if (cap == CapOklch || cap == CapOklab) && target.Has(CapDisplayP3) {
+					needed.bits[CapDisplayP3/64] |= uint64(1) << (CapDisplayP3 % 64)
+				}
 				changed := w.emit(text)
 				sheet, _ := Parse(changed)
 				currentSpans = styleSpans(sheet)
@@ -154,7 +165,17 @@ func putVariant(out []byte, entry int, needed, projected Caps, miniOff, miniLen,
 	for _, word := range projected.bits {
 		rank += bits.OnesCount64(word)
 	}
-	binary.LittleEndian.PutUint32(out[entry+48:], uint32(rank*8))
+	// Colour preference fits in three bits: two native capabilities and P3.
+	colour := 0
+	for _, cap := range [...]Cap{CapOklch, CapOklab} {
+		if needed.Has(cap) {
+			colour += 2
+		}
+	}
+	if needed.Has(CapDisplayP3) {
+		colour++
+	}
+	binary.LittleEndian.PutUint32(out[entry+48:], uint32(rank*8+colour))
 	for word, n := range needed.bits {
 		binary.LittleEndian.PutUint64(out[entry+word*8:], n)
 	}

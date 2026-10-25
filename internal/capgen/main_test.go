@@ -28,7 +28,7 @@ func TestSupportIntervals(t *testing.T) {
 	if err := json.Unmarshal([]byte(data), &bcd); err != nil {
 		t.Fatal(err)
 	}
-	got, err := support(bcd, "css.feature", "safari")
+	got, err := support(bcd, "css.feature", "safari", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,10 +36,10 @@ func TestSupportIntervals(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("support = %#v, want %#v", got, want)
 	}
-	if got, err := support(bcd, "css.feature", "ie"); err != nil || len(got) != 0 {
+	if got, err := support(bcd, "css.feature", "ie", false); err != nil || len(got) != 0 {
 		t.Fatalf("missing browser = %v, %v", got, err)
 	}
-	if _, err := support(bcd, "css.missing", "safari"); err == nil {
+	if _, err := support(bcd, "css.missing", "safari", false); err == nil {
 		t.Fatal("missing BCD key accepted")
 	}
 }
@@ -49,7 +49,7 @@ func TestBoundedSupport(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"css":{"feature":{"__compat":{"support":{"chrome":{"version_added":"≤37","version_removed":"40"}}}}}}`), &bcd); err != nil {
 		t.Fatal(err)
 	}
-	got, err := support(bcd, "css.feature", "chrome")
+	got, err := support(bcd, "css.feature", "chrome", false)
 	want := []interval{{0x25000000000000, 0x28000000000000}}
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("bounded support = %v, %v; want %v", got, err, want)
@@ -125,4 +125,27 @@ func TestPinnedRegeneration(t *testing.T) {
 		t.Fatal("repeated generation is nondeterministic")
 	}
 	t.Logf("two regenerations byte-identical to caps_gen.go (%d bytes)", len(got))
+}
+
+func TestDisplayP3PartialColorSupport(t *testing.T) {
+	const data = `{"css":{"types":{"color":{"color":{"__compat":{"support":{"safari":[
+		{"version_added":"15"},
+		{"version_added":"10.1","version_removed":"15","partial_implementation":true,"notes":"Only supports <code>display-p3</code> and <code>srgb</code> predefined color profiles."},
+		{"version_added":"8","version_removed":"10.1","partial_implementation":true,"notes":"Other partial support"}
+	]}}}}}}}`
+	var bcd map[string]any
+	if err := json.Unmarshal([]byte(data), &bcd); err != nil {
+		t.Fatal(err)
+	}
+	for _, p3 := range []bool{false, true} {
+		wantFrom := uint64(0xf000000000000)
+		if p3 {
+			wantFrom = 0xa000100000000
+		}
+		got, err := support(bcd, "css.types.color.color", "safari", p3)
+		want := []interval{{wantFrom, math.MaxUint64}}
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Fatalf("display-p3=%v: %v, %v; want %v", p3, got, err, want)
+		}
+	}
 }

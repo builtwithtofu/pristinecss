@@ -21,6 +21,10 @@ implementations, flags, preview builds and unknown
 introduction dates do not count as full browser support. Removal endpoints are
 exclusive. A removal in `preview` leaves stable support open-ended.
 
+`CapDisplayP3` is narrower than `CapColorFunction`. Its generator accepts BCD's
+explicit Safari 10.1 / iOS 10.3 partial interval whose note says that `display-p3`
+and `srgb` are supported. Other partial implementations are still excluded.
+
 Browser IDs are mapped explicitly from MDN names to caniuse-style names in
 `main.go`; browsers without a corresponding dataset are unknown, not aliases to
 a different engine. Numeric future versions follow recorded open intervals.

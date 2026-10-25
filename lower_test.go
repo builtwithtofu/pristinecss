@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -73,6 +75,8 @@ func TestLowerKnown(t *testing.T) {
 		{"a{color:oklab(1 0 0);--c:OKLCH(0 0 0)}", "a{color:rgb(255,255,255);--c:rgb(0,0,0)}", 0},
 		{"a{color:oklab(0 0 0 / 25%)}", "a{color:rgba(0,0,0,0.25)}", 0},
 		{"a{color:oklch(.6 .1 30 / .4)}", "a{color:rgba(180,104,92,0.4)}", 0},
+		{"a{color:oklab(.5 1 1)}", "a{color:rgb(172,54,0)}", 0},
+		{"a{color:oklab(.5 1e308 1e308)}", "a{color:rgb(172,54,0)}", 0},
 		{"a{color:oklab(.5 1e309 0)}", "a{color:oklab(.5 1e309 0)}", 1},
 		{"a{background:linear-gradient(oklab(0 0 0),oklch(none .1 30),oklab(1 0 0))}", "a{background:linear-gradient(rgb(0,0,0),oklch(none .1 30),rgb(255,255,255))}", 1},
 		{"a{color:oklch(none .2 30);background:oklab(calc(.5) 0 0);border-color:oklch(.5 var(--c) 20)}", "a{color:oklch(none .2 30);background:oklab(calc(.5) 0 0);border-color:oklch(.5 var(--c) 20)}", 3},
@@ -152,6 +156,40 @@ func TestLowerInsetUnterminatedComment(t *testing.T) {
 	want := "a{top:0!important;right:0!important;bottom:0!important;left:0!important}"
 	if got := string(s.CSS(nil, Caps{})); got != want || len(report.Gaps) != 0 || s.Source() != src {
 		t.Fatalf("incomplete trailing comment: %s, %+v", got, report)
+	}
+}
+
+func TestLowerReferenceColors(t *testing.T) {
+	for _, tc := range []struct {
+		input string
+		want  [3]float64
+	}{
+		{"oklab(.627955 .224863 .125846)", [3]float64{255, 0, 0}},
+		{"oklab(.86644 -.233888 .179498)", [3]float64{0, 255, 0}},
+		{"oklab(.452014 -.032457 -.311528)", [3]float64{0, 0, 255}},
+		{"oklab(.905399 -.149444 -.039398)", [3]float64{0, 255, 255}},
+		{"oklab(.701674 .274566 -.169156)", [3]float64{255, 0, 255}},
+		{"oklab(.967983 -.071369 .19857)", [3]float64{255, 255, 0}},
+		{"oklch(.6279553639214311 .2576833038053608 29.23388027962784)", [3]float64{255, 0, 0}},
+		{"oklch(.8664396175234368 .2948272245426958 142.4953450414439)", [3]float64{0, 255, 0}},
+		{"oklch(.45201371817442365 .3132143886344849 264.0520226163699)", [3]float64{0, 0, 255}},
+	} {
+		s, report := buildLower(t, []byte("a{color:"+tc.input+"}"), Options{Lower: lowerTargets(), MinFidelity: Approximate})
+		if len(report.Gaps) != 0 {
+			t.Fatal(report.Gaps)
+		}
+		out := s.CSS(nil, Caps{})
+		start, end := bytes.IndexByte(out, '('), bytes.IndexByte(out, ')')
+		fields := strings.Split(string(out[start+1:end]), ",")
+		if len(fields) != 3 {
+			t.Fatalf("not rgb: %s", out)
+		}
+		for i, f := range fields {
+			x, err := strconv.ParseFloat(f, 64)
+			if err != nil || math.Abs(x-tc.want[i]) > .01 {
+				t.Fatalf("%s -> %s; want %v", tc.input, out, tc.want)
+			}
+		}
 	}
 }
 
@@ -240,6 +278,32 @@ func TestLowerGapPositionsAndFidelity(t *testing.T) {
 			}
 			if !found {
 				t.Fatalf("missing target gap for %s", text)
+			}
+		}
+	}
+	for _, tc := range []struct {
+		literal, exact string
+		mapped         Cap
+	}{
+		{"a{inset:1px;color:oklch(.6 .1 30);background:oklab(.5 1 1)}", "rgb(180,104,92)", CapOklab},
+		{"a{color:oklab(.5 0 0);background:oklch(.5 .5 30)}", "rgb(99,99,99)", CapOklch},
+	} {
+		for _, fidelity := range []Fidelity{0, Identical, Close, Approximate} {
+			s, report := buildLower(t, []byte(tc.literal), Options{Lower: []Target{Chrome.At("49")}, MinFidelity: fidelity})
+			out := string(s.CSS(nil, Caps{}))
+			if !strings.Contains(out, tc.exact) {
+				t.Fatalf("in-gamut colour was not lowered at fidelity %d: %s", fidelity, out)
+			}
+			if fidelity == Identical {
+				if len(report.Gaps) != 1 || report.Gaps[0].Cap != tc.mapped || report.Gaps[0].What != "gamut mapping requires Close fidelity" || len(report.Mappings) != 0 {
+					t.Fatalf("mapping not gated by explicit Identical fidelity: %+v", report)
+				}
+				gap := report.Gaps[0]
+				if !strings.Contains(out, tc.literal[gap.Lo:gap.Hi]) {
+					t.Fatal("colour requiring mapping was not preserved")
+				}
+			} else if len(report.Gaps) != 0 || len(report.Mappings) != 1 || strings.Contains(out, "oklch(") || strings.Contains(out, "oklab(") {
+				t.Fatalf("mapping was not enabled: %s, %+v", out, report)
 			}
 		}
 	}
@@ -439,5 +503,39 @@ func TestLowerNeutralColorsAtDefaultFidelity(t *testing.T) {
 	want := "a{color:rgb(255,255,255);background:rgba(255,255,255,0.01)}"
 	if got := string(s.CSS(nil, Caps{})); got != want || len(report.Gaps) != 0 {
 		t.Fatalf("neutral colours need no clipping: %s, %+v", got, report.Gaps)
+	}
+}
+func TestLowerCorpusColorCounts(t *testing.T) {
+	for _, target := range []Target{Chrome.At("49"), Safari.At("12")} {
+		var lowered, gaps, mapped int
+		for _, path := range corpusFiles(t) {
+			src := readCSS(t, path)
+			s, report := buildLower(t, src, Options{Lower: []Target{target}})
+			out := s.CSS(nil, target.Caps)
+			original, _ := Parse(src)
+			result, errs := Parse(out)
+			if len(errs) != 0 {
+				t.Fatal(errs)
+			}
+			var count, remaining, reported int
+			for _, cap := range []Cap{CapOklch, CapOklab} {
+				before := scanLower(string(src), styleSpans(original), cap, Approximate, Caps{})
+				after := scanLower(string(out), styleSpans(result), cap, Approximate, Caps{})
+				count += len(before.edits) + len(before.gaps)
+				remaining += len(after.edits) + len(after.gaps)
+			}
+			for _, gap := range report.Gaps {
+				if gap.Cap == CapOklch || gap.Cap == CapOklab {
+					reported++
+				}
+			}
+			if remaining != reported {
+				t.Fatalf("%s: %d remaining colours, %d reported gaps", path, remaining, reported)
+			}
+			lowered += count - remaining
+			gaps += reported
+			mapped += len(report.Mappings)
+		}
+		t.Logf("display-p3=%v lowered=%d mapped=%d colour-gaps=%d", target.Caps.Has(CapDisplayP3), lowered, mapped, gaps)
 	}
 }

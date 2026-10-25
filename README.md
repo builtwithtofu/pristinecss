@@ -33,7 +33,7 @@ Emission takes an `EmitStyle` value instead of a formatter interface. `Minified`
 
 ## Embedding
 
-`ToBinary(css, Options{})` returns a read-only spans binary and a `Report` containing parse errors, lowering gaps, variant count and binary size (`Bytes`). It retains the exact source and precomputes minified and pretty output. Generate a Go string constant with `fmt.Fprintf(w, "const App = %q\n", bin)`.
+`ToBinary(css, Options{})` returns a read-only spans binary and a `Report` containing parse errors, lowering gaps, gamut mappings, variant count and binary size (`Bytes`). It retains the exact source and precomputes minified and pretty output. Generate a Go string constant with `fmt.Fprintf(w, "const App = %q\n", bin)`.
 
 ```go
 app := pristinecss.Open(styles.App) // trusted binary constant; no validation or copy
@@ -58,15 +58,19 @@ bin, report := pristinecss.ToBinary(css, pristinecss.Options{
 
 `Lower` accepts `Target` values, retaining each browser's `BrowserID`, original `Version`, and `Caps`. Generated IDs include `Chrome`, `Edge`, `Firefox`, `Safari`, `IOSSafari`, `ChromeAndroid`, `FirefoxAndroid`, `Samsung`, `Opera`, `OperaAndroid`, and `IE`. `.At(version)` accepts the same versions as `Browser`, including ranges, ESR suffixes and `TP`. Use `Target{Caps: caps}` for a capability-only target. Browser-specific facts such as prefix support belong in per-browser data, not capability bits.
 
-The build stores one complete output per distinct projected `Target.Caps`, plus the unlowered modern output. Empty `Lower` disables lowering and retains the original single-output binary format. `Report.Gaps` retains the full requested `Target`, even when different identities share an output. Only exact duplicate targets share diagnostics. Request-time callers still use `Browser(Safari, "17")` or handshake `Caps` with `CSS` and `Key`.
+The build stores one complete output per distinct projected `Target.Caps`, plus the unlowered modern output. Empty `Lower` disables lowering and retains the original single-output binary format. `Report.Gaps` and `Report.Mappings` retain the full requested `Target`, even when different identities share an output. Only exact duplicate targets share diagnostics. Request-time callers still use `Browser(Safari, "17")` or handshake `Caps` with `CSS` and `Key`.
 
-`CSS(dst, caps)` copies the richest stored output whose required capabilities are present in `caps`. If none fits, it copies the most-lowered output. Richness counts the projected target's capabilities. Remaining ties use the lowest projected capability bitmask, independent of target order. `Key(caps)` identifies the binary and selected variant, ignoring capabilities that do not change the selection.
+`CSS(dst, caps)` copies the richest stored output whose required capabilities are present in `caps`. If none fits, it copies the most-lowered output. Richness counts the projected target's capabilities. Among equally rich safe variants, prefer more retained native colour capabilities (`oklch`/`oklab`), then P3 output over sRGB. Remaining ties use the lowest projected capability bitmask, independent of target order. `Key(caps)` identifies the binary and selected variant, ignoring capabilities that do not change the selection.
 
-The rewrites expand `inset` to four sides and convert in-gamut literal `oklch()`/`oklab()` to legacy `rgb()`/`rgba()` with integer RGB channels. Alpha is preserved. Colours that need gamut mapping remain unchanged with a gap, as do `var()`, `calc()`, `none` and relative colour expressions. In-gamut conversions are `Identical` apart from serialization rounding.
+The first rewrites expand `inset` to four sides and convert literal `oklch()`/`oklab()` into `color(display-p3 ...)` when the target has `CapDisplayP3`, or legacy `rgb()`/`rgba()` with integer RGB channels otherwise. Alpha is preserved.
 
 Inset expansion validates the whole declaration, including priority. Only one to four lengths, percentages or `auto`, or a single CSS-wide keyword, are expanded. Literal `calc()` arithmetic is type-checked; unsupported math functions, substitutions and invalid values remain unchanged with a positioned gap. The parser recognises escaped, ASCII case-insensitive `important` names even without lowering; rewrites use its `FlagImportant` metadata.
 
-`Key` reuses the stored CRC-32C and allocates nothing; it is not a cryptographic identity. `Raise` is reserved for the next step.
+In-gamut colours are `Identical` apart from serialization rounding. Out-of-gamut colours use [CSS Color 4's local-MINDE gamut mapping](https://www.w3.org/TR/css-color-4/#gamut-mapping): preserve OKLCh lightness and hue while binary-searching chroma, with deltaEOK JND 0.02. Mapping is `Close` fidelity. Zero `MinFidelity` defaults to `Close`, so mapping needs no extra opt-in. Explicit `Identical` skips colours that need mapping and reports those sites as fidelity gaps.
+
+`Report.Mappings` records each mapped colour's source byte positions, capability, requested target and destination gamut. Mappings are `Close` by definition; `Changes` stays reserved for raising. `var()`, `calc()`, `none` and relative colour syntax remain gaps, as do top-level `var()`, `env()` and `attr()` substitutions in `inset`. Repeated targets do not repeat diagnostics. Unresolved expressions do not veto the target's other lowerings. Colours kept because of a fidelity gap still require their original capability when selecting a safe variant.
+
+`CapDisplayP3` is bit 170. Unlike the broader `CapColorFunction`, it includes Safari's P3-only support from 10.1 (iOS 10.3); Chrome supports it from 111 and Firefox from 113, according to [BCD's `css.types.color.color`](https://raw.githubusercontent.com/mdn/browser-compat-data/v8.1.7/css/types/color.json). `Key` reuses the stored CRC-32C and allocates nothing; it is not a cryptographic identity. `Raise` is reserved for the next step.
 
 ## Architecture
 

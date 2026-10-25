@@ -19,27 +19,47 @@ func (w *lowering) color(raw []byte, lo, hi uint32, nameLen int) {
 			return
 		}
 	}
-	rgb := oklabRGB(lab[0], lab[1], lab[2])
-	if !rgbInGamut(rgb) {
-		w.fidelityGap = true
-		w.cannot(lo, hi, "colour needs gamut mapping")
-		return
+	p3 := w.target.Has(CapDisplayP3)
+	rgb, mapped := gamutMap(lab, p3)
+	if mapped {
+		if w.fidelity < Close {
+			w.fidelityGap = true
+			w.cannot(lo, hi, "gamut mapping requires Close fidelity")
+			return
+		}
+		gamut := "srgb"
+		if p3 {
+			gamut = "display-p3"
+		}
+		w.mappings = append(w.mappings, Mapping{Lo: lo, Hi: hi, Cap: w.cap, Gamut: gamut})
 	}
 	start := len(w.text)
-	w.text = append(w.text, "rgb("...)
-	for i, v := range rgb {
-		if i != 0 {
-			w.text = append(w.text, ',')
+	if p3 {
+		w.text = append(w.text, "color(display-p3"...)
+		for _, c := range rgb {
+			w.text = append(w.text, ' ')
+			w.text = strconv.AppendFloat(w.text, c, 'f', 6, 64)
 		}
-		w.text = strconv.AppendInt(w.text, int64(math.Round(v*255)), 10)
-	}
-	// Legacy comma syntax needs the rgba alias for translucent colours.
-	if values[3] != 1 {
-		w.text = append(w.text, 0)
-		copy(w.text[start+4:], w.text[start+3:len(w.text)-1])
-		w.text[start+3] = 'a'
-		w.text = append(w.text, ',')
-		w.text = strconv.AppendFloat(w.text, values[3], 'f', -1, 64)
+		if values[3] != 1 {
+			w.text = append(w.text, " / "...)
+			w.text = strconv.AppendFloat(w.text, values[3], 'f', -1, 64)
+		}
+	} else {
+		w.text = append(w.text, "rgb("...)
+		for i, v := range rgb {
+			if i != 0 {
+				w.text = append(w.text, ',')
+			}
+			w.text = strconv.AppendInt(w.text, int64(math.Round(v*255)), 10)
+		}
+		// Legacy comma syntax needs the rgba alias for translucent colours.
+		if values[3] != 1 {
+			w.text = append(w.text, 0)
+			copy(w.text[start+4:], w.text[start+3:len(w.text)-1])
+			w.text[start+3] = 'a'
+			w.text = append(w.text, ',')
+			w.text = strconv.AppendFloat(w.text, values[3], 'f', -1, 64)
+		}
 	}
 	w.text = append(w.text, ')')
 	w.edits = append(w.edits, lowerEdit{lo, hi, start, len(w.text)})
