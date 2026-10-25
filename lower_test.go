@@ -58,6 +58,7 @@ func TestLowerKnown(t *testing.T) {
 	}{
 		{"a{inset:1px}", "a{top:1px;right:1px;bottom:1px;left:1px}", 0},
 		{`a{in\73 et:1px}`, "a{top:1px;right:1px;bottom:1px;left:1px}", 0},
+		{`a{color:o\6b lch(0 0 0)}`, "a{color:rgb(0,0,0)}", 0},
 		{`a{inset:v\61 r(--edges)}`, `a{inset:v\61 r(--edges)}`, 1},
 		{"a{inset:1px 2%}", "a{top:1px;right:2%;bottom:1px;left:2%}", 0},
 		{"a{INSET:auto -2px 3em}", "a{top:auto;right:-2px;bottom:3em;left:-2px}", 0},
@@ -69,6 +70,15 @@ func TestLowerKnown(t *testing.T) {
 		{"a{inset:attr(data-edges)}", "a{inset:attr(data-edges)}", 1},
 		{`a{inset:a\74 tr(data-edges)}`, `a{inset:a\74 tr(data-edges)}`, 1},
 		{"a{inset:1px 2px 3px 4px 5px}", "a{inset:1px 2px 3px 4px 5px}", 1},
+		{"a{color:oklab(1 0 0);--c:OKLCH(0 0 0)}", "a{color:rgb(255,255,255);--c:rgb(0,0,0)}", 0},
+		{"a{color:oklab(0 0 0 / 25%)}", "a{color:rgba(0,0,0,0.25)}", 0},
+		{"a{color:oklch(.6 .1 30 / .4)}", "a{color:rgba(180,104,92,0.4)}", 0},
+		{"a{color:oklab(.5 1e309 0)}", "a{color:oklab(.5 1e309 0)}", 1},
+		{"a{background:linear-gradient(oklab(0 0 0),oklch(none .1 30),oklab(1 0 0))}", "a{background:linear-gradient(rgb(0,0,0),oklch(none .1 30),rgb(255,255,255))}", 1},
+		{"a{color:oklch(none .2 30);background:oklab(calc(.5) 0 0);border-color:oklch(.5 var(--c) 20)}", "a{color:oklch(none .2 30);background:oklab(calc(.5) 0 0);border-color:oklch(.5 var(--c) 20)}", 3},
+		{"a{--c:oklch(.5 .2 calc(30));--text:'oklab(1 0 0)';--url:url(oklab(1 0 0))}", "a{--c:oklch(.5 .2 calc(30));--text:'oklab(1 0 0)';--url:url(oklab(1 0 0))}", 1},
+		{"a{color:oklch(100% 0 1turn / 200%);background:oklab(-1 0 0 / -1)}", "a{color:rgb(255,255,255);background:rgba(0,0,0,0)}", 0},
+		{"a{--x:oklch(0 0 0);--y:oklch(var(--l) 0 0)}", "a{--x:rgb(0,0,0);--y:oklch(var(--l) 0 0)}", 1},
 	} {
 		t.Run(tc.in, func(t *testing.T) {
 			s, report := buildLower(t, []byte(tc.in), Options{Lower: []Target{Chrome.At("49")}, MinFidelity: Approximate})
@@ -145,30 +155,93 @@ func TestLowerInsetUnterminatedComment(t *testing.T) {
 	}
 }
 
-func TestLowerVariantsAndKey(t *testing.T) {
-	src := []byte("a{inset:1px}")
-	old, newest := Browser(Chrome, "49"), Browser(Chrome, "111")
-	s, report := buildLower(t, src, Options{Lower: []Target{{Caps: old}, {Caps: newest}, {Caps: old}}})
-	if report.Variants != 2 {
-		t.Fatalf("duplicate targets: %d variants, want 2", report.Variants)
+func TestLowerColorSyntax(t *testing.T) {
+	for _, pair := range [][2]string{
+		{"oklch(.6 .1 90)", "oklch(60% 25% 100grad)"},
+		{"oklch(.6 .1 180)", "oklch(.6 .1 3.141592653589793rad)"},
+		{"oklch(.6 .1 90)", "oklch(6e-1 1e-1 .25turn)"},
+		{"oklab(.6 .1 -.1)", "oklab(60% 25% -25%)"},
+		{"oklab(.6 .1 -.1)", "oklab(.6/**/.1/**/-.1)"},
+		{"oklch(.6 0 90)", "oklch(.6 -.1 90)"},
+	} {
+		var outputs [2]string
+		for i, input := range pair {
+			s, report := buildLower(t, []byte("a{color:"+input+"}"), Options{Lower: lowerTargets(), MinFidelity: Approximate})
+			if len(report.Gaps) != 0 {
+				t.Fatal(report.Gaps)
+			}
+			outputs[i] = string(s.CSS(nil, Caps{}))
+		}
+		if outputs[0] != outputs[1] {
+			t.Fatal(outputs)
+		}
 	}
-	wantOld := "a{top:1px;right:1px;bottom:1px;left:1px}"
+	for _, input := range []string{"none .1 30", ".6 none 30", ".6 .1 none", ".6 .1 30 / none", "var(--l) .1 30", ".6 calc(.1) 30", ".6 .1 30 / var(--a)", "from red l c h", ".6 .1 30%", ".6,.1,30", ".6 .1 30 junk"} {
+		src := "a{color:oklch(" + input + ")}"
+		s, report := buildLower(t, []byte(src), Options{Lower: lowerTargets(), MinFidelity: Approximate})
+		if len(report.Gaps) != 3 || string(s.CSS(nil, Caps{})) != minCSS(src) {
+			t.Fatalf("%s: %+v", input, report.Gaps)
+		}
+	}
+}
+
+func TestLowerVariantsAndKey(t *testing.T) {
+	src := []byte("a{inset:1px;color:oklch(0 0 0);background:oklab(1 0 0)}")
+	old, middle, newest := Browser(Chrome, "49"), Browser(Chrome, "90"), Browser(Chrome, "111")
+	s, report := buildLower(t, src, Options{Lower: []Target{{Caps: old}, {Caps: middle}, {Caps: newest}}, MinFidelity: Approximate})
+	if report.Variants != 3 {
+		t.Fatalf("three targets: %d variants", report.Variants)
+	}
+	wantMiddle := "a{inset:1px;color:rgb(0,0,0);background:rgb(255,255,255)}"
+	if got := string(s.CSS(nil, Browser(Chrome, "100"))); got != wantMiddle {
+		t.Fatalf("between targets: %s, want %s", got, wantMiddle)
+	}
+	wantOld := "a{top:1px;right:1px;bottom:1px;left:1px;color:rgb(0,0,0);background:rgb(255,255,255)}"
 	for _, caps := range []Caps{old, Caps{}, Browser("unknown", "1")} {
 		if got := string(s.CSS(nil, caps)); got != wantOld || s.Key(caps) != s.Key(old) {
 			t.Fatalf("fallback: %s, want %s", got, wantOld)
 		}
 	}
-	if got := string(s.CSS(nil, newest)); got != string(src) || s.Key(old) == s.Key(newest) {
-		t.Fatalf("modern selection: %s", got)
+	if s.Key(old) == s.Key(middle) || s.Key(middle) == s.Key(Modern) {
+		t.Fatal("different variants share a key")
 	}
-	unrelated := old.Bits()
+	unrelated := middle.Bits()
 	unrelated[3] ^= 1 << 63
-	if s.Key(old) != s.Key(CapsFromBits(unrelated)) {
+	if s.Key(middle) != s.Key(CapsFromBits(unrelated)) {
 		t.Fatal("unused capability changed Key")
+	}
+	duplicate, dupReport := buildLower(t, src, Options{Lower: []Target{{Caps: old}, {Caps: old}, Firefox.At("60"), {Caps: middle}, {Caps: CapsFromBits(unrelated)}}, MinFidelity: Approximate})
+	if dupReport.Variants != 3 || !bytes.Equal(duplicate.CSS(nil, middle), s.CSS(nil, middle)) {
+		t.Fatalf("duplicates not projected and collapsed: %d", dupReport.Variants)
+	}
+	_, allModern := buildLower(t, src, Options{Lower: []Target{{Caps: Modern}, {Caps: newest}}})
+	if allModern.Variants != 1 {
+		t.Fatalf("modern duplicates: %d", allModern.Variants)
 	}
 	plain, plainReport := buildLower(t, src, Options{})
 	if plainReport.Variants != 1 || plain.Key(Caps{}) != plain.Key(Modern) || !bytes.Equal(plain.CSS(nil, Caps{}), plain.CSS(nil, Modern)) {
 		t.Fatal("unrequested lowering")
+	}
+}
+
+func TestLowerGapPositionsAndFidelity(t *testing.T) {
+	src := []byte("a{\n color:oklch(var(--l) .1 30);\n inset:var(--edges);\n background:oklab(calc(.5) 0 0);\n border-color:oklch(none .1 30)}")
+	_, report := buildLower(t, src, Options{Lower: lowerTargets(), MinFidelity: Approximate})
+	if len(report.Gaps) != 12 {
+		t.Fatalf("gaps: %+v", report.Gaps)
+	}
+	for _, target := range lowerTargets() {
+		for _, text := range []string{"oklch(var(--l) .1 30)", "inset:var(--edges)", "oklab(calc(.5) 0 0)", "oklch(none .1 30)"} {
+			found := false
+			for _, gap := range report.Gaps {
+				if gap.Target == target && string(src[gap.Lo:gap.Hi]) == text && gap.What != "" {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("missing target gap for %s", text)
+			}
+		}
 	}
 }
 
@@ -202,7 +275,7 @@ func TestLowerSheets(t *testing.T) {
 						if len(errs) != 0 {
 							t.Fatal(errs)
 						}
-						for _, cap := range []Cap{CapInset} {
+						for _, cap := range []Cap{CapInset, CapOklch, CapOklab} {
 							remaining := scanLower(string(out), styleSpans(tree), cap, Approximate, target.Caps)
 							want := 0
 							for _, gap := range report.Gaps {
@@ -288,11 +361,48 @@ func FuzzLower(f *testing.F) {
 	})
 }
 
+func TestLowerSafeWithGaps(t *testing.T) {
+	src := []byte("a{inset:1px;color:oklch(var(--l) 0 0);background:oklab(1 0 0)}")
+	s, _ := buildLower(t, src, Options{Lower: []Target{Chrome.At("49"), Chrome.At("90")}, MinFidelity: Approximate})
+	for _, tc := range []struct {
+		caps Caps
+		want string
+	}{
+		{Caps{}, "a{top:1px;right:1px;bottom:1px;left:1px;color:oklch(var(--l) 0 0);background:rgb(255,255,255)}"},
+		{CapsFromBits([4]uint64{1 << CapInset}), "a{inset:1px;color:oklch(var(--l) 0 0);background:rgb(255,255,255)}"},
+		{CapsFromBits([4]uint64{1 << CapOklch}), "a{top:1px;right:1px;bottom:1px;left:1px;color:oklch(var(--l) 0 0);background:rgb(255,255,255)}"},
+		{CapsFromBits([4]uint64{1<<CapInset | 1<<CapOklch}), "a{inset:1px;color:oklch(var(--l) 0 0);background:rgb(255,255,255)}"},
+	} {
+		if got := string(s.CSS([]byte("prefix:"), tc.caps)); got != "prefix:"+tc.want {
+			t.Fatalf("got %s; want %s", got, tc.want)
+		}
+	}
+}
+
+func TestLowerIndependentColors(t *testing.T) {
+	src := []byte("a{inset:1px;color:oklch(0 0 0);background:oklab(1 0 0)}")
+	old := Caps{}
+	inset := CapsFromBits([4]uint64{1 << CapInset})
+	lch := CapsFromBits([4]uint64{1 << CapOklch})
+	s, report := buildLower(t, src, Options{Lower: []Target{{Caps: old}, {Caps: inset}, {Caps: lch}}, MinFidelity: Approximate})
+	if report.Variants != 4 {
+		t.Fatalf("three distinct targets plus modern: %d variants", report.Variants)
+	}
+	want := "a{top:1px;right:1px;bottom:1px;left:1px;color:oklch(0 0 0);background:rgb(255,255,255)}"
+	if got := string(s.CSS(nil, lch)); got != want {
+		t.Fatalf("got %s; want %s", got, want)
+	}
+}
+
 func TestLowerDuplicateGaps(t *testing.T) {
-	old := Browser(Chrome, "49")
+	old, middle := Browser(Chrome, "49"), Browser(Chrome, "90")
 	_, report := buildLower(t, []byte("a{inset:var(--edges)}"), Options{Lower: []Target{{Caps: old}, {Caps: old}, {Caps: old}}})
 	if report.Variants != 2 || len(report.Gaps) != 1 {
 		t.Fatalf("duplicate targets repeated gaps: %+v", report)
+	}
+	_, report = buildLower(t, []byte("a{color:oklch(var(--l) 0 0)}"), Options{Lower: []Target{{Caps: old}, {Caps: old}, {Caps: middle}, {Caps: middle}}})
+	if report.Variants != 2 || len(report.Gaps) != 2 || report.Gaps[0].Target != (Target{Caps: old}) || report.Gaps[1].Target != (Target{Caps: middle}) {
+		t.Fatalf("gaps must identify each distinct requested target once: %+v", report)
 	}
 }
 
@@ -320,5 +430,14 @@ func BenchmarkStyleKey(b *testing.B) {
 				benchmarkKey = s.Key(caps)
 			}
 		})
+	}
+}
+
+func TestLowerNeutralColorsAtDefaultFidelity(t *testing.T) {
+	src := []byte("a{color:oklab(1 0 0);background:oklch(100% 0 0/.01)}")
+	s, report := buildLower(t, src, Options{Lower: lowerTargets()})
+	want := "a{color:rgb(255,255,255);background:rgba(255,255,255,0.01)}"
+	if got := string(s.CSS(nil, Caps{})); got != want || len(report.Gaps) != 0 {
+		t.Fatalf("neutral colours need no clipping: %s, %+v", got, report.Gaps)
 	}
 }
