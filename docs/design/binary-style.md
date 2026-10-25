@@ -45,11 +45,42 @@ The caller:
 ### Build: CSS in, binary out
 
 ```go
-bin, diags := pristinecss.ToBinary(css) // bin is []byte
-for _, d := range diags {
-    fmt.Println(d) // "app.css:12:3: unknown property 'colr'"
+func ToBinary(css []byte, o Options) ([]byte, Report)
+
+type Options struct {
+    Raise       Caps     // opt-in: rewrite up to this floor; zero keeps CSS as written
+    Lower       []Caps   // opt-in: the targets to support; empty means no lowering
+    MinFidelity Fidelity // skip rewrites less faithful than this; default Identical
+}
+
+type Fidelity uint8 // Identical, Close, Approximate
+
+type Report struct {
+    Errors   []ParseError
+    Changes  []Change // raises made
+    Gaps     []Gap    // what can't be lowered for each target
+    Variants int      // finished outputs stored
+}
+
+type Change struct {
+    Lo, Hi uint32
+    Cap    Cap
+    What   string
 }
 ```
+
+`Raise` opts in to rewriting old CSS to a modern floor. Zero options keep CSS
+as written. Raising drops prefixes Baseline does not need, removes old hacks
+such as `*zoom` and `\9`, collapses fallback pairs, and upgrades old syntax.
+`Lower` opts in to lowering, browserslist-style: list the browsers to support,
+such as `[]Caps{Browser("chrome", "49"), Browser("safari", "12")}`. The build
+does all the lowering. It cuts each target down to the capabilities this sheet
+uses, drops duplicates, and stores one finished output per remaining target plus
+the modern output, so there are at most `len(Lower)+1`. A slightly bigger binary
+buys a request that does nothing but copy.
+
+`MinFidelity` is a build-time choice only. `Source()` always returns the exact
+original CSS.
 
 The caller decides what to do with the bytes. Clay writes them into the
 component it generates. Someone else might write a `.go` file:
@@ -57,7 +88,6 @@ component it generates. Someone else might write a `.go` file:
 ```go
 fmt.Fprintf(w, "package styles\n\nconst App = %q\n", bin)
 ```
-
 ### Open it
 
 ```go
@@ -69,16 +99,18 @@ app, err := pristinecss.Load(fileBytes)  // checked: for anything else
 
 ### Get CSS out
 
-One call covers plain output and lowering:
+Raise and lower when building the binary, then pick per request. Each browser
+gets the richest stored output it can safely use:
 
 ```go
-css := app.CSS(dst, caps)                   // minified, lowered for caps
+css := app.CSS(dst, caps) // minified, lowered for caps
 css = app.CSS(dst, caps, pristinecss.Pretty)
-css = app.CSS(dst, pristinecss.Modern)      // no lowering; stored ready-made
-src := app.Source()                         // the exact file the author wrote
+src := app.Source()       // the exact file the author wrote
 ```
 
-`dst` lets callers reuse a buffer, so a warm server allocates nothing.
+`dst` lets callers reuse a buffer, so a warm server allocates nothing. `CSS`
+picks the richest stored variant whose capabilities are all in `caps`. When none
+fits, such as an unknown browser, it uses the most-lowered variant.
 
 ### Live server
 
@@ -90,29 +122,28 @@ func serveCSS(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-For caching, `app.Key(caps)` gives the sheet's hash plus only the capabilities
-this sheet cares about. A sheet that never uses `oklch()` has the same key for
-browsers that differ only in colour support, so they share a cache entry.
+For caching, `app.Key(caps)` names the variant `CSS` would pick, so browsers
+that get the same output share a key. It does no hashing per request.
 
 ### Ahead of time
 
+Build with that one target in `Lower`, then:
+
 ```go
-css := app.CSS(nil, pristinecss.Target("chrome 49"))
+css := app.CSS(nil, pristinecss.Browser("chrome", "49"))
 ```
 
 Or from the command line:
 
 ```sh
-pristinecss build app.css --target "chrome 49" -o app.chrome49.css
+pristinecss lower app.css --target "chrome 49"
 ```
 
 ### What cannot be lowered
 
-```go
-for _, d := range app.Unlowerable(pristinecss.Target("safari 12")) {
-    fmt.Println(d) // "app.css:40:10: oklch() with var() can't become rgb()"
-}
-```
+`Report.Gaps` lists what cannot be lowered for each target, at build time,
+before anything ships. A gap is never silent; it says where, for which target,
+and what happened instead.
 
 ### Native apps
 
@@ -131,12 +162,48 @@ for rule := range app.Rules() {
     }
 }
 ```
-
 ### Tools
 
 Linters, formatters and editors change CSS, so they keep today's editable tree
 (`Parse`, `Walk`, `Delete`, `Emit`). When they are done they call `ToBinary` on
 the result.
+
+## Capabilities and rewrites
+
+Capabilities are numbered, append-only, and cover the features pristinecss can
+raise, lower or report on. The list is generated from web-features and MDN
+data. Browser IDs use caniuse-style names, including `chrome`, `firefox`,
+`safari`, `ios_saf`, `and_chr`, `edge`, `ie` and `samsung`.
+
+```go
+type Cap uint16
+type Caps struct{ bits [4]uint64 }
+
+func (Caps) Has(Cap) bool
+func (Caps) Bits() [4]uint64
+func CapsFromBits([4]uint64) Caps
+
+var Modern Caps
+func Baseline(year int) Caps
+func Browser(id BrowserID, version string) Caps
+```
+
+`Caps` is a comparable value with no pointers, so it can be a map key. `Modern`
+means everything is supported, so nothing is lowered.
+
+Serving uses `CSS(dst, caps, opts...)` and `Key(caps)`; gaps come from the
+build `Report`. Rewrites are internal and never exported. One table keyed by `Cap`
+holds each rewrite's fidelity, raise function and lower function.
+
+The files are `caps.go`, `caps_gen.go`, `style.go`, `rewrite.go`,
+`rewrite_<area>.go`, and `internal/capgen`.
+
+Raising is opt-in at build time. The CLI is:
+
+```sh
+pristinecss raise old.css --to baseline-2024
+pristinecss lower app.css --target "chrome 49"
+```
 
 ## What the binary holds
 
@@ -180,43 +247,39 @@ Go takes to compile very large string constants.
 
 1. Is `Lower` the only transform, or can users plug in their own? Plugins would
    slow the microsecond path.
-2. How far back should presets go? IE6 is the worst case, not a promise.
-3. How is the capability list built? One idea: from the public Baseline data, so
-   it updates when Baseline moves.
-4. How does a browser report what it can do? Not fleshed out yet. Polyfill.io is
-   the model to study, but decide by what the browser reports, not its user
-   agent. One idea: each capability ships with the check a browser runs to
-   report it, so the caller's handshake just runs our list and sends back bits.
-
+2. How far back should browser presets go? IE6 is the worst case, not a promise.
+3. How does a browser report what it can do? The caller owns the handshake. The
+   handshake model still needs deciding: Polyfill.io is one model to study, but
+   decide by what the browser reports, not its user agent.
 ## Steps
 
 Each step ends with something we can measure or use.
 
-0. **Clear the decks.** Finish and merge the broken-CSS recovery work. Commit the
-   docs.
-1. **Check the risk first.** Measure how long Go takes to compile very large
-   string constants. If it's slow, rethink "constant in code" before building
-   on it.
-2. **Style v1, no lowering.** `ToBinary`, `Open`, `Load`, `Source()` and
-   `CSS(dst, Modern)` in minified and pretty forms, using the spans design. The
-   checksum covers everything, which fixes the old frame's checksum covering
-   only the CSS text. Removes the old AST frame and the IR. Proof: every corpus
-   sheet round-trips exactly, output matches the emitter, and it beats the old
-   frame's numbers.
-3. **Capabilities and first lowerings.** `Caps`, a few capability bits, per-rule
-   capability notes, `CSS(dst, caps)` lowering `inset` and `oklch()`/`oklab()`,
-   `Unlowerable`, `Key(caps)` and two or three hand-written `Target` presets.
-   Proof: Bootstrap lowers in tens of microseconds with no allocations once warm.
-4. **Decoded values.** Colours, lengths and keywords decoded at build time;
-   property names as numbers; lowering uses them. Proof: the dense 1 MB case
-   drops well below 5.8 ms.
-5. **Native reader.** `Rules()`, `Selector()`, `Decls()` and typed values, shaped
-   by Clay's answers.
-6. **CLI.** `pristinecss build --target`, and a command that outputs the binary.
-7. **Capabilities at scale.** The capability list from Baseline data; more
-   lowerings one at a time (nesting, logical properties and so on); the
-   handshake model.
-Steps 2 to 4 are the core. Steps 5 to 7 can go in any order after that.
+Done:
+
+- Clear the decks: the broken-CSS recovery work and these docs landed.
+- Check the risk: a large string constant builds in under 2 seconds and costs
+  nothing at startup. A `[]byte{...}` literal is the form to avoid.
+- Style v1: `ToBinary`, `Open`, `Load`, `Source()` and `CSS(dst, Modern)` on the
+  spans binary, replacing the old AST frame and the IR.
+
+Next:
+
+1. **Benchmark budget.** Time prototype lowering and raising on the spans
+   binary for every corpus sheet. Those times are the budget steps 3 and 4 must
+   keep or beat.
+2. **Capabilities.** Generate the append-only capability list and provide
+   `Caps`, `Baseline` and `Browser`.
+3. **Opt-in lowering.** `Options.Lower` stores one finished output per target,
+   starting with `inset` and `oklch()`/`oklab()`; `CSS(dst, caps)` picks one.
+   Include `Report.Gaps` and `Key(caps)`; never leave a silent
+   gap.
+4. **Opt-in raise.** `ToBinary(css, Options{Raise: ...})` raises CSS to a modern
+   floor and reports every change. `Source()` stays exact.
+5. **CLI.** Add `pristinecss raise` and `pristinecss lower`.
+
+Deferred: more rewrites from `lowerings.md`, decoded values, the native reader,
+JS shims, and rendering in real browsers to prove fidelity.
 
 ## Questions for Clay
 
