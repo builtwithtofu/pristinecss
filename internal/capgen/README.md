@@ -24,6 +24,8 @@ exclusive. A removal in `preview` leaves stable support open-ended.
 Browser IDs are mapped explicitly from MDN names to caniuse-style names in
 `main.go`; browsers without a corresponding dataset are unknown, not aliases to
 a different engine. Numeric future versions follow recorded open intervals.
+The same mapping generates typed `BrowserID` constants (`Chrome`, `Safari`,
+`ChromeAndroid`, and the other mapped browsers) for both `Browser` and `.At`.
 
 ## Regenerate
 
