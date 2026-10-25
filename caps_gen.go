@@ -4,6 +4,21 @@
 
 package pristinecss
 
+// Browser IDs use caniuse-style names from the mapped browser data.
+const (
+	Chrome         BrowserID = "chrome"
+	ChromeAndroid  BrowserID = "and_chr"
+	Edge           BrowserID = "edge"
+	Firefox        BrowserID = "firefox"
+	FirefoxAndroid BrowserID = "and_ff"
+	Safari         BrowserID = "safari"
+	IOSSafari      BrowserID = "ios_saf"
+	IE             BrowserID = "ie"
+	Samsung        BrowserID = "samsung"
+	Opera          BrowserID = "opera"
+	OperaAndroid   BrowserID = "op_mob"
+)
+
 // Capability numbers are stable handshake bits. Append assignments in capabilities.tsv.
 const (
 	CapInset                        Cap = 0
