@@ -224,6 +224,10 @@ func TestCapWireNumbers(t *testing.T) {
 		CapCornerShape, CapInterpolateSize, CapCalcSize, CapScrollDrivenAnimations,
 		CapViewTransitions, CapCrossDocumentViewTransitions, CapGridLanes,
 		CapReadingFlow, CapTransitionBehavior, CapDisplayP3,
+		CapTransition, CapAnimation, CapTransformOrigin, CapBackfaceVisibility,
+		CapPerspective, CapObjectFit, CapFilter, CapTabSize, CapTouchAction,
+		CapFontFeatureSettings, CapTextSizeAdjust, CapColumnGap, CapMaskLonghands,
+		CapTextDecorationSkipInk,
 	}
 	if len(caps) != len(capBaseline) {
 		t.Fatal("append new capabilities to the wire-number test")
