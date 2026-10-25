@@ -52,7 +52,7 @@ func TestCapsNoAllocations(t *testing.T) {
 		bitsSink = capsSink.Bits()
 		hasSink = capsSink.Has(CapInset)
 		capsSink = Browser("chrome", "120")
-		capsSink = Browser("safari", "27")
+		capsSink = Browser("safari", "TP")
 		capsSink = Baseline(2024)
 	}); n != 0 {
 		t.Fatalf("allocations = %g, want 0", n)
@@ -110,6 +110,27 @@ func TestBrowser(t *testing.T) {
 				t.Fatalf("Browser(%q, %q).Has(%d) = %v, want %v", tt.id, tt.version, tt.cap, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestBrowserslistForms(t *testing.T) {
+	for _, tt := range []struct {
+		id               BrowserID
+		version, asPlain string
+	}{
+		{"ios_saf", "15.2-15.3", "15.2"},
+		{"firefox", "115.0esr", "115"},
+		{"firefox", "115esr", "115"},
+	} {
+		if Browser(tt.id, tt.version) != Browser(tt.id, tt.asPlain) {
+			t.Fatalf("Browser(%q, %q) differs from Browser(%q, %q)", tt.id, tt.version, tt.id, tt.asPlain)
+		}
+	}
+	if Browser("safari", "TP") != Browser("safari", "27") {
+		t.Fatal("Safari TP should be the newest Safari version in the data (27)")
+	}
+	if Browser("safari", "TP") == (Caps{}) {
+		t.Fatal("Safari TP is empty")
 	}
 }
 

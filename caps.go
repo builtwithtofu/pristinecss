@@ -43,13 +43,16 @@ func Baseline(year int) Caps {
 
 // Browser returns full, unprefixed, unflagged support recorded in the pinned
 // compatibility data. Versions are one to four decimal components (0..65535),
-// compared numerically with missing components zero.
+// compared numerically with missing components zero. Browserslist forms are
+// also accepted: a range "A-B" uses its lower end A ("15.2-15.3" is "15.2"),
+// an "esr" suffix is ignored ("115.0esr" is "115.0"), and "TP" (Safari
+// Technology Preview) is the newest version in the data for that browser.
 // Unknown IDs and other malformed versions (including preview) return an empty
 // set. Future numeric versions follow recorded open intervals, not a prediction
 // of future support. A BCD introduction bounded by ≤ is accepted only from the
 // stated bound; unknown introduction dates and preview-only support do not qualify.
 func Browser(id BrowserID, version string) Caps {
-	v, ok := capVersion(version)
+	v, ok := browserVersion(id, version)
 	if !ok {
 		return Caps{}
 	}
@@ -65,6 +68,27 @@ func Browser(id BrowserID, version string) Caps {
 type capSupport struct {
 	cap      Cap
 	from, to uint64 // packed four-component versions; to is exclusive, zero is unbounded
+}
+
+func browserVersion(id BrowserID, s string) (uint64, bool) {
+	if s == "TP" {
+		return newestVersion(id), true
+	}
+	if lo, hi, isRange := strings.Cut(s, "-"); isRange {
+		if _, ok := capVersion(hi); !ok {
+			return 0, false
+		}
+		s = lo
+	}
+	return capVersion(strings.TrimSuffix(s, "esr"))
+}
+
+func newestVersion(id BrowserID) uint64 {
+	var newest uint64
+	for _, s := range capBrowsers[id] {
+		newest = max(newest, s.from, s.to)
+	}
+	return newest
 }
 
 func capVersion(s string) (uint64, bool) {
