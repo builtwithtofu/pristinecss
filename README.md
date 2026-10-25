@@ -21,6 +21,17 @@ out := sheet.Emit(nil, pristinecss.EmitOptions{Style: pristinecss.Minified})
 fmt.Printf("%s\n", out)
 ```
 
+## CLI
+
+Build with `go build -o pristinecss ./cmd/pristinecss`, then run:
+
+```sh
+pristinecss raise old.css --to baseline-2024 > modern.css
+pristinecss lower app.css --target "chrome 49" > chrome49.css
+```
+
+CSS goes to stdout; changes, lowering gaps, gamut mappings and recoverable parse errors go to stderr. Parse errors do not fail the command; usage and file read errors do. Use `-` instead of a file to read stdin. `--to baseline-YYYY` selects `Baseline(YYYY)`. Targets use caniuse-style IDs (for example `chrome`, `ios_saf`, `safari`) and `BrowserID.At` versions, including `"ios_saf 15.2-15.3"` and `"safari TP"`. Rewrites are exactly those provided by the library.
+
 ## Ownership and concurrency
 
 `Parse` and `ParseInto` borrow their source buffer: the caller must not mutate or free it while the `Sheet` or any `Extract`ed child lives. Use `ExtractOwned` when a result must outlive the original bytes. Binary `Style` values are immutable and safe to share across goroutines. `Load` copies its input; `Open` borrows an immutable string.
