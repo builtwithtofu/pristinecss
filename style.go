@@ -27,6 +27,10 @@ func checksum(b []byte) uint32 { return crc32.Checksum(b, checksumTable) }
 // The result owns its bytes and does not retain css.
 func ToBinary(css []byte, o Options) ([]byte, Report) {
 	s, diags := Parse(css)
+	report := Report{Errors: diags, Variants: 1}
+	if o.Raise != (Caps{}) {
+		report.Changes = raiseSheet(s, o)
+	}
 	spans := styleSpans(s)
 	var index []byte
 	var prev uint32
@@ -50,7 +54,6 @@ func ToBinary(css []byte, o Options) ([]byte, Report) {
 	out = append(out, css...)
 	out = append(out, mini...)
 	out = append(out, pretty...)
-	report := Report{Errors: diags, Variants: 1}
 	if len(o.Lower) != 0 {
 		out = buildVariants(out, css, spans, o, &report)
 	}
@@ -184,13 +187,13 @@ func styleSpans(s *Sheet) []styleSpan {
 	prefix := make([]uint32, len(s.nodes)+1)
 	for i, n := range s.nodes {
 		prefix[i+1] = prefix[i]
-		if styleSelected(n.Kind) {
+		if styleSelected(n.Kind) && n.Flags&FlagTombstone == 0 {
 			prefix[i+1]++
 		}
 	}
 	var out []styleSpan
 	for i, n := range s.nodes {
-		if !styleSelected(n.Kind) {
+		if !styleSelected(n.Kind) || n.Flags&FlagTombstone != 0 {
 			continue
 		}
 		e := styleSpan{kind: n.Kind, flags: n.Flags, sub: prefix[i+int(n.Sub)] - prefix[i], lo: n.Lo}

@@ -33,7 +33,7 @@ Emission takes an `EmitStyle` value instead of a formatter interface. `Minified`
 
 ## Embedding
 
-`ToBinary(css, Options{})` returns a read-only spans binary and a `Report` containing parse errors, lowering gaps, gamut mappings, variant count and binary size (`Bytes`). It retains the exact source and precomputes minified and pretty output. Generate a Go string constant with `fmt.Fprintf(w, "const App = %q\n", bin)`.
+`ToBinary(css, Options{})` returns a read-only spans binary and a `Report` containing parse errors, raising changes, lowering gaps, gamut mappings, variant count and binary size (`Bytes`). It retains the exact source and precomputes minified and pretty output. Generate a Go string constant with `fmt.Fprintf(w, "const App = %q\n", bin)`.
 
 ```go
 app := pristinecss.Open(styles.App) // trusted binary constant; no validation or copy
@@ -43,6 +43,20 @@ source := app.Source() // exact original CSS
 ```
 
 Use `Load(bytes)` for untrusted binaries: it checks the binary's structure and a checksum over all of it, and owns a copy. The checksum catches accidental damage, not deliberate tampering. `Open` is only for binaries built by your own program. `CSS` accepts only the `Minified` and `Pretty` presets, not custom whitespace settings.
+
+### Build-time raising
+
+```go
+bin, report := pristinecss.ToBinary(css, pristinecss.Options{
+    Raise: pristinecss.Baseline(2024),
+})
+```
+
+`Raise` drops `-webkit-`, `-moz-`, `-ms-` and `-o-` declarations only when a later, nonempty unprefixed declaration in the same block overrides their importance and its capability is supported at the floor. A prefixed `!important` requires an unprefixed `!important`. Unknown properties, unsupported capabilities and replacements with parser errors stay as written. Limitation: an unprefixed value that our parser accepts but the browser rejects at parse time can still cause an unsafe drop; raising does not validate property-specific value grammars. `Report.Changes` lists every drop with original source byte positions (`Lo`, exclusive `Hi`), capability and reason. `Source()` stays exact.
+
+Inside keyframe blocks, unprefixed `!important` declarations do not count as replacements: browsers ignore those declarations.
+
+Raising runs before lowering. Every stored output starts from the raised CSS. A lower target lacking a dropped declaration's capability gets a `Report.Gaps` entry if BCD records its browser/version reading that specific prefixed property, including compatibility aliases. For a capability-only target, a gap is reported if any recorded browser could read the prefix without supporting the unprefixed feature. Prefix support is build-time browser data, never capability bits. Zero `Options{}` leaves the binary and output byte-identical.
 
 ### Build-time lowering
 
@@ -58,7 +72,7 @@ bin, report := pristinecss.ToBinary(css, pristinecss.Options{
 
 `Lower` accepts `Target` values, retaining each browser's `BrowserID`, original `Version`, and `Caps`. Generated IDs include `Chrome`, `Edge`, `Firefox`, `Safari`, `IOSSafari`, `ChromeAndroid`, `FirefoxAndroid`, `Samsung`, `Opera`, `OperaAndroid`, and `IE`. `.At(version)` accepts the same versions as `Browser`, including ranges, ESR suffixes and `TP`. Use `Target{Caps: caps}` for a capability-only target. Browser-specific facts such as prefix support belong in per-browser data, not capability bits.
 
-The build stores one complete output per distinct projected `Target.Caps`, plus the unlowered modern output. Empty `Lower` disables lowering and retains the original single-output binary format. `Report.Gaps` and `Report.Mappings` retain the full requested `Target`, even when different identities share an output. Only exact duplicate targets share diagnostics. Request-time callers still use `Browser(Safari, "17")` or handshake `Caps` with `CSS` and `Key`.
+The build stores one complete output per distinct projected `Target.Caps`, plus the unlowered modern output. Empty `Lower` disables lowering and retains the original single-output binary format. With zero `Raise`, it preserves the original binary byte for byte. `Report.Gaps` and `Report.Mappings` retain the full requested `Target`, even when different identities share an output. Only exact duplicate targets share diagnostics. Request-time callers still use `Browser(Safari, "17")` or handshake `Caps` with `CSS` and `Key`.
 
 `CSS(dst, caps)` copies the richest stored output whose required capabilities are present in `caps`. If none fits, it copies the most-lowered output. Richness counts the projected target's capabilities. Among equally rich safe variants, prefer more retained native colour capabilities (`oklch`/`oklab`), then P3 output over sRGB. Remaining ties use the lowest projected capability bitmask, independent of target order. `Key(caps)` identifies the binary and selected variant, ignoring capabilities that do not change the selection.
 
@@ -70,7 +84,7 @@ In-gamut colours are `Identical` apart from serialization rounding. Out-of-gamut
 
 `Report.Mappings` records each mapped colour's source byte positions, capability, requested target and destination gamut. Mappings are `Close` by definition; `Changes` stays reserved for raising. `var()`, `calc()`, `none` and relative colour syntax remain gaps, as do top-level `var()`, `env()` and `attr()` substitutions in `inset`. Repeated targets do not repeat diagnostics. Unresolved expressions do not veto the target's other lowerings. Colours kept because of a fidelity gap still require their original capability when selecting a safe variant.
 
-`CapDisplayP3` is bit 170. Unlike the broader `CapColorFunction`, it includes Safari's P3-only support from 10.1 (iOS 10.3); Chrome supports it from 111 and Firefox from 113, according to [BCD's `css.types.color.color`](https://raw.githubusercontent.com/mdn/browser-compat-data/v8.1.7/css/types/color.json). `Key` reuses the stored CRC-32C and allocates nothing; it is not a cryptographic identity. `Raise` is reserved for the next step.
+`CapDisplayP3` is bit 170. Unlike the broader `CapColorFunction`, it includes Safari's P3-only support from 10.1 (iOS 10.3); Chrome supports it from 111 and Firefox from 113, according to [BCD's `css.types.color.color`](https://raw.githubusercontent.com/mdn/browser-compat-data/v8.1.7/css/types/color.json). `Key` reuses the stored CRC-32C and allocates nothing; it is not a cryptographic identity.
 
 ## Architecture
 

@@ -33,7 +33,7 @@ func (b BrowserID) At(version string) Target {
 
 // Options controls build-time rewrites. Zero keeps the CSS as written.
 type Options struct {
-	Raise       Caps     // Reserved for build-time raising; not implemented yet.
+	Raise       Caps     // Modernise to this floor; zero disables raising.
 	Lower       []Target // Targets to support; empty disables lowering.
 	MinFidelity Fidelity
 }
@@ -74,15 +74,47 @@ type Report struct {
 }
 
 type rewrite struct {
-	fidelity Fidelity
-	raise    func(*Sheet, Caps) []Change // T4 supplies raising.
-	lower    func(*lowering, styleSpan, string)
+	fidelity   Fidelity
+	properties []string // Unprefixed declaration names covered by this capability.
+	raise      func(*Sheet, NodeID, Cap) Change
+	lower      func(*lowering, styleSpan, string)
 }
 
 var rewrites = map[Cap]rewrite{
-	CapInset: {fidelity: Identical, lower: (*lowering).inset},
-	CapOklch: {fidelity: Identical, lower: (*lowering).colors},
-	CapOklab: {fidelity: Identical, lower: (*lowering).colors},
+	CapInset:                    {fidelity: Identical, lower: (*lowering).inset},
+	CapOklch:                    {fidelity: Identical, lower: (*lowering).colors},
+	CapOklab:                    {fidelity: Identical, lower: (*lowering).colors},
+	CapTransform:                {fidelity: Identical, properties: []string{"transform"}, raise: dropPrefix},
+	CapTransform3D:              {fidelity: Identical, properties: []string{"transform-style"}, raise: dropPrefix},
+	CapOpacity:                  {fidelity: Identical, properties: []string{"opacity"}, raise: dropPrefix},
+	CapClipPath:                 {fidelity: Identical, properties: []string{"clip-path"}, raise: dropPrefix},
+	CapMask:                     {fidelity: Identical, properties: []string{"mask"}, raise: dropPrefix},
+	CapBackdropFilter:           {fidelity: Identical, properties: []string{"backdrop-filter"}, raise: dropPrefix},
+	CapUserSelect:               {fidelity: Identical, properties: []string{"user-select"}, raise: dropPrefix},
+	CapAppearance:               {fidelity: Identical, properties: []string{"appearance"}, raise: dropPrefix},
+	CapHyphens:                  {fidelity: Identical, properties: []string{"hyphens"}, raise: dropPrefix},
+	CapBoxSizing:                {fidelity: Identical, properties: []string{"box-sizing"}, raise: dropPrefix},
+	CapBorderRadius:             {fidelity: Identical, properties: []string{"border-radius", "border-top-left-radius", "border-top-right-radius", "border-bottom-left-radius", "border-bottom-right-radius"}, raise: dropPrefix},
+	CapBoxShadow:                {fidelity: Identical, properties: []string{"box-shadow"}, raise: dropPrefix},
+	CapBackgroundSize:           {fidelity: Identical, properties: []string{"background-size"}, raise: dropPrefix},
+	CapLineClamp:                {fidelity: Identical, properties: []string{"line-clamp"}, raise: dropPrefix},
+	CapPrintColorAdjust:         {fidelity: Identical, properties: []string{"print-color-adjust"}, raise: dropPrefix},
+	CapTextDecorationColorStyle: {fidelity: Identical, properties: []string{"text-decoration", "text-decoration-color", "text-decoration-style"}, raise: dropPrefix},
+	CapFlexbox:                  {fidelity: Identical, properties: []string{"flex", "flex-direction", "flex-wrap", "flex-flow", "flex-grow", "flex-shrink", "flex-basis", "align-items", "align-self", "align-content", "justify-content", "order"}, raise: dropPrefix},
+	CapTransition:               {fidelity: Identical, properties: []string{"transition", "transition-property", "transition-duration", "transition-delay", "transition-timing-function"}, raise: dropPrefix},
+	CapAnimation:                {fidelity: Identical, properties: []string{"animation", "animation-name", "animation-duration", "animation-delay", "animation-timing-function", "animation-iteration-count", "animation-direction", "animation-fill-mode", "animation-play-state"}, raise: dropPrefix},
+	CapTransformOrigin:          {fidelity: Identical, properties: []string{"transform-origin"}, raise: dropPrefix},
+	CapBackfaceVisibility:       {fidelity: Identical, properties: []string{"backface-visibility"}, raise: dropPrefix},
+	CapPerspective:              {fidelity: Identical, properties: []string{"perspective", "perspective-origin"}, raise: dropPrefix},
+	CapObjectFit:                {fidelity: Identical, properties: []string{"object-fit"}, raise: dropPrefix},
+	CapFilter:                   {fidelity: Identical, properties: []string{"filter"}, raise: dropPrefix},
+	CapTabSize:                  {fidelity: Identical, properties: []string{"tab-size"}, raise: dropPrefix},
+	CapTouchAction:              {fidelity: Identical, properties: []string{"touch-action"}, raise: dropPrefix},
+	CapFontFeatureSettings:      {fidelity: Identical, properties: []string{"font-feature-settings"}, raise: dropPrefix},
+	CapTextSizeAdjust:           {fidelity: Identical, properties: []string{"text-size-adjust"}, raise: dropPrefix},
+	CapColumnGap:                {fidelity: Identical, properties: []string{"column-gap"}, raise: dropPrefix},
+	CapMaskLonghands:            {fidelity: Identical, properties: []string{"mask-image", "mask-size", "mask-position"}, raise: dropPrefix},
+	CapTextDecorationSkipInk:    {fidelity: Identical, properties: []string{"text-decoration-skip-ink"}, raise: dropPrefix},
 }
 
 type lowering struct {

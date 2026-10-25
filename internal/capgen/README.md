@@ -25,7 +25,9 @@ exclusive. A removal in `preview` leaves stable support open-ended.
 property spellings, browser IDs and version intervals. It includes partial
 implementations and compatibility aliases, but not flag-gated entries. It uses
 the same pinned BCD data and version rules as feature support, without assigning
-prefixes any capability bits.
+prefixes any capability bits. Named `Target`s use their browser/version;
+capability-only targets conservatively report a gap when any recorded browser
+could read the prefix while lacking the unprefixed feature.
 
 `CapDisplayP3` is narrower than `CapColorFunction`. Its generator accepts BCD's
 explicit Safari 10.1 / iOS 10.3 partial interval whose note says that `display-p3`
