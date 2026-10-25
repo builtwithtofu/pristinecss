@@ -1,10 +1,12 @@
 package pristinecss
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/binary"
 	"math/bits"
 	"slices"
+	"strings"
 )
 
 // PCS2 keeps the PCS1 header, index, source and modern outputs. Before the
@@ -61,10 +63,20 @@ func (s *Style) variant(caps Caps, table int) uint32 {
 }
 
 func buildVariants(out, css []byte, spans []styleSpan, o Options, report *Report) []byte {
+	source := string(css)
+	if len(report.Changes) != 0 {
+		// Blanking deletions preserves original coordinates for diagnostics.
+		css = bytes.Clone(css)
+		for _, change := range report.Changes {
+			for i := change.Lo; i < change.Hi; i++ {
+				css[i] = ' '
+			}
+		}
+	}
 	src := string(css)
 	var original Caps
 	for cap := Cap(0); cap < 256; cap++ {
-		if _, ok := rewrites[cap]; !ok {
+		if r, ok := rewrites[cap]; !ok || r.lower == nil {
 			continue
 		}
 		if scanLower(src, spans, cap, o.MinFidelity, Caps{}).used {
@@ -82,6 +94,19 @@ func buildVariants(out, css []byte, spans []styleSpan, o Options, report *Report
 			continue
 		}
 		seen[target] = true
+		for _, change := range report.Changes {
+			if target.Caps.Has(change.Cap) {
+				continue
+			}
+			name, _, _ := strings.Cut(source[change.Lo:change.Hi], ":")
+			name = strings.TrimSpace(name)
+			if targetReadPrefix(name, change.Cap, target) {
+				report.Gaps = append(report.Gaps, Gap{
+					Lo: change.Lo, Hi: change.Hi, Cap: change.Cap, Target: target,
+					What: "dropped prefix cannot be restored: no lowering for this capability",
+				})
+			}
+		}
 		var projected Caps
 		for word := range 4 {
 			projected.bits[word] = target.Caps.bits[word] & used.bits[word]
