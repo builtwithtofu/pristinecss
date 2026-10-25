@@ -12,6 +12,20 @@ import (
 
 var cliFixture = []byte("a{\n  -webkit-transform:rotate(0);transform:rotate(0);\n  inset:1px 2px;\n  color:oklch(.9 .35 0);\n  background:oklch(var(--c))\n}\nb{inset:var(--x)}")
 
+// wantStdout is the CLI's stdout for a binary: pretty by default, minified with --minified,
+// and exactly one trailing newline.
+func wantStdout(bin []byte, caps pristinecss.Caps, minified bool) []byte {
+	style := pristinecss.Open(string(bin))
+	out := style.CSS(nil, caps, pristinecss.Pretty)
+	if minified {
+		out = style.CSS(nil, caps)
+	}
+	if len(out) == 0 || out[len(out)-1] != '\n' {
+		out = append(out, '\n')
+	}
+	return out
+}
+
 func TestCommandsMatchLibrary(t *testing.T) {
 	fixturePath := filepath.Join(t.TempDir(), "app.css")
 	if err := os.WriteFile(fixturePath, cliFixture, 0600); err != nil {
@@ -23,36 +37,45 @@ func TestCommandsMatchLibrary(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, command := range []string{"raise", "lower"} {
-			t.Run(filepath.Base(file)+"/"+command, func(t *testing.T) {
-				options := pristinecss.Options{Raise: pristinecss.Baseline(2024)}
-				caps := pristinecss.Modern
-				args := []string{command, file, "--to", "baseline-2024"}
-				if command == "lower" {
-					target := pristinecss.Chrome.At("49")
-					options = pristinecss.Options{Lower: []pristinecss.Target{target}}
-					caps = target.Caps
-					args = []string{command, file, "--target", "chrome 49"}
+			for _, minified := range []bool{false, true} {
+				name := filepath.Base(file) + "/" + command + "/pretty"
+				if minified {
+					name = filepath.Base(file) + "/" + command + "/minified"
 				}
-				bin, _ := pristinecss.ToBinary(src, options)
-				var out, diagnostics bytes.Buffer
-				if code := run(args, strings.NewReader(""), &out, &diagnostics); code != 0 {
-					t.Fatalf("exit %d: %s", code, &diagnostics)
-				}
-				if want := append(pristinecss.Open(string(bin)).CSS(nil, caps), '\n'); !bytes.Equal(out.Bytes(), want) {
-					t.Fatal("stdout differs from library CSS")
-				}
-				if file == fixturePath {
-					want := file + ":2:3: dropped -webkit-transform: a later transform overrides it, and the raise floor supports it\n"
+				t.Run(name, func(t *testing.T) {
+					options := pristinecss.Options{Raise: pristinecss.Baseline(2024)}
+					caps := pristinecss.Modern
+					args := []string{command, file, "--to", "baseline-2024"}
 					if command == "lower" {
-						want = file + ":5:14: chrome 49: cannot lower colour: needs literal numeric components (no none/calc/var or relative syntax)\n" +
-							file + ":7:3: chrome 49: cannot lower inset: invalid or unsupported value\n" +
-							file + ":4:9: chrome 49: colour mapped into the srgb gamut\n"
+						target := pristinecss.Chrome.At("49")
+						options = pristinecss.Options{Lower: []pristinecss.Target{target}}
+						caps = target.Caps
+						args = []string{command, file, "--target", "chrome 49"}
 					}
-					if diagnostics.String() != want {
-						t.Fatalf("stderr = %q, want %q", diagnostics.String(), want)
+					if minified {
+						args = append(args, "--minified")
 					}
-				}
-			})
+					bin, _ := pristinecss.ToBinary(src, options)
+					var out, diagnostics bytes.Buffer
+					if code := run(args, strings.NewReader(""), &out, &diagnostics); code != 0 {
+						t.Fatalf("exit %d: %s", code, &diagnostics)
+					}
+					if !bytes.Equal(out.Bytes(), wantStdout(bin, caps, minified)) {
+						t.Fatal("stdout differs from library CSS")
+					}
+					if file == fixturePath {
+						want := file + ":2:3: dropped -webkit-transform: a later transform overrides it, and the raise floor supports it\n"
+						if command == "lower" {
+							want = file + ":5:14: chrome 49: cannot lower colour: needs literal numeric components (no none/calc/var or relative syntax)\n" +
+								file + ":7:3: chrome 49: cannot lower inset: invalid or unsupported value\n" +
+								file + ":4:9: chrome 49: colour mapped into the srgb gamut\n"
+						}
+						if diagnostics.String() != want {
+							t.Fatalf("stderr = %q, want %q", diagnostics.String(), want)
+						}
+					}
+				})
+			}
 		}
 	}
 }
@@ -75,10 +98,26 @@ func TestStdinAndVersionForms(t *testing.T) {
 			if code := run([]string{"lower", "--target", string(version.id) + " " + version.v, "-"}, bytes.NewReader(src), &out, &diagnostics); code != 0 {
 				t.Fatalf("exit %d: %s", code, &diagnostics)
 			}
-			if !bytes.Equal(out.Bytes(), append(pristinecss.Open(string(bin)).CSS(nil, target.Caps), '\n')) {
+			if !bytes.Equal(out.Bytes(), wantStdout(bin, target.Caps, false)) {
 				t.Fatal("stdout differs from library CSS")
 			}
 		})
+	}
+}
+
+func TestEmptyInput(t *testing.T) {
+	for _, minified := range []bool{false, true} {
+		args := []string{"raise", "-", "--to", "baseline-2024"}
+		if minified {
+			args = append(args, "--minified")
+		}
+		var out, diagnostics bytes.Buffer
+		if code := run(args, bytes.NewReader(nil), &out, &diagnostics); code != 0 {
+			t.Fatalf("minified=%v: exit %d: %s", minified, code, &diagnostics)
+		}
+		if out.String() != "\n" {
+			t.Fatalf("minified=%v: stdout %q, want a single newline", minified, out.String())
+		}
 	}
 }
 
@@ -89,7 +128,7 @@ func TestParseErrorsRecover(t *testing.T) {
 		if code := run(args, bytes.NewReader(src), &out, &diagnostics); code != 0 {
 			t.Fatalf("exit %d: %s", code, &diagnostics)
 		}
-		if !strings.Contains(diagnostics.String(), "parse error:") || !strings.Contains(out.String(), "color:red") {
+		if !strings.Contains(diagnostics.String(), "parse error:") || !strings.Contains(out.String(), "color: red") {
 			t.Fatalf("expected recovered CSS and parse diagnostic; stdout=%q stderr=%q", &out, &diagnostics)
 		}
 	}

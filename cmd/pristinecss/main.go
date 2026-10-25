@@ -19,7 +19,7 @@ func main() {
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 || (args[0] != "raise" && args[0] != "lower") {
-		fmt.Fprintln(stderr, "usage: pristinecss raise FILE --to baseline-YYYY\n       pristinecss lower FILE --target \"BROWSER VERSION\"\nUse - as FILE to read stdin.")
+		fmt.Fprintln(stderr, "usage: pristinecss raise FILE --to baseline-YYYY [--minified]\n       pristinecss lower FILE --target \"BROWSER VERSION\" [--minified]\nUse - as FILE to read stdin.")
 		if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
 			return 0
 		}
@@ -33,6 +33,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		flags.PrintDefaults()
 	}
 	var to, targetValue string
+	minified := flags.Bool("minified", false, "print minified CSS instead of pretty")
 	switch command {
 	case "raise":
 		flags.StringVar(&to, "to", "", "capability floor: baseline-YYYY (required)")
@@ -119,7 +120,16 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "%s:%d:%d: %s %s: colour mapped into the %s gamut\n", file, line, col, m.Target.Browser, m.Target.Version, m.Gamut)
 	}
 	style := pristinecss.Open(string(bin))
-	if _, err := stdout.Write(append(style.CSS(nil, caps), '\n')); err != nil {
+	var out []byte
+	if *minified {
+		out = style.CSS(nil, caps)
+	} else {
+		out = style.CSS(nil, caps, pristinecss.Pretty)
+	}
+	if len(out) == 0 || out[len(out)-1] != '\n' {
+		out = append(out, '\n')
+	}
+	if _, err := stdout.Write(out); err != nil {
 		fmt.Fprintf(stderr, "write CSS: %v\n", err)
 		return 1
 	}
