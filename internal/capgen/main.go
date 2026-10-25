@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"go/format"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -198,6 +199,30 @@ func generate(data, list string) ([]byte, error) {
 		fmt.Fprintln(&out, "},")
 	}
 	fmt.Fprintln(&out, "}")
+	fmt.Fprintln(&out, "\nvar prefixedProperties = map[string][]prefixSupport{")
+	properties := bcd["css"].(map[string]any)["properties"].(map[string]any)
+	for _, property := range slices.Sorted(maps.Keys(properties)) {
+		for _, prefix := range []string{"-webkit-", "-moz-", "-ms-", "-o-"} {
+			var entries bytes.Buffer
+			for _, browser := range browsers {
+				spans, err := support(bcd, "css.properties."+property+"@"+prefix, browser.mdn, false)
+				if err != nil {
+					return nil, err
+				}
+				for _, span := range spans {
+					end := span.to
+					if end == math.MaxUint64 {
+						end = 0
+					}
+					fmt.Fprintf(&entries, "{%s, %#x, %#x},\n", browser.name, span.from, end)
+				}
+			}
+			if entries.Len() != 0 {
+				fmt.Fprintf(&out, "%q: {\n%s},\n", prefix+property, entries.Bytes())
+			}
+		}
+	}
+	fmt.Fprintln(&out, "}")
 	return format.Source(out.Bytes())
 }
 
@@ -235,6 +260,7 @@ func version(s string) (uint64, error) {
 }
 
 func support(bcd map[string]any, key, browser string, displayP3 bool) ([]interval, error) {
+	key, prefix, _ := strings.Cut(key, "@")
 	var node any = bcd
 	for _, part := range strings.Split(key+".__compat.support", ".") {
 		m, ok := node.(map[string]any)
@@ -268,7 +294,7 @@ func support(bcd map[string]any, key, browser string, displayP3 bool) ([]interva
 		// BCD's partial Safari color() implementation fully supports this
 		// narrower surface, but not CapColorFunction's other profiles.
 		partialP3 := displayP3 && key == "css.types.color.color" && s.Notes == "Only supports <code>display-p3</code> and <code>srgb</code> predefined color profiles."
-		if !ok || added == "preview" || s.Prefix != "" || s.Alternative != "" || (s.Partial && !partialP3) || len(s.Flags) != 0 {
+		if !ok || added == "preview" || s.Prefix != prefix || s.Alternative != "" || (s.Partial && !partialP3 && prefix == "") || len(s.Flags) != 0 {
 			continue
 		}
 		start, err := version(added)

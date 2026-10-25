@@ -21,6 +21,12 @@ implementations, flags, preview builds and unknown
 introduction dates do not count as full browser support. Removal endpoints are
 exclusive. A removal in `preview` leaves stable support open-ended.
 
+`prefixedProperties` is a separate, unexported build-time table of prefixed
+property spellings, browser IDs and version intervals. It includes partial
+implementations and compatibility aliases, but not flag-gated entries. It uses
+the same pinned BCD data and version rules as feature support, without assigning
+prefixes any capability bits.
+
 `CapDisplayP3` is narrower than `CapColorFunction`. Its generator accepts BCD's
 explicit Safari 10.1 / iOS 10.3 partial interval whose note says that `display-p3`
 and `srgb` are supported. Other partial implementations are still excluded.

@@ -44,6 +44,24 @@ func TestSupportIntervals(t *testing.T) {
 	}
 }
 
+func TestPrefixedSupportIntervals(t *testing.T) {
+	const data = `{"css":{"feature":{"__compat":{"support":{"edge":[
+		{"version_added":"1"},
+		{"version_added":"17","version_removed":"79","prefix":"-webkit-","partial_implementation":true},
+		{"version_added":"12","prefix":"-ms-"},
+		{"version_added":"1","prefix":"-webkit-","flags":[{"name":"flag"}]}
+	]}}}}}`
+	var bcd map[string]any
+	if err := json.Unmarshal([]byte(data), &bcd); err != nil {
+		t.Fatal(err)
+	}
+	got, err := support(bcd, "css.feature@-webkit-", "edge", false)
+	want := []interval{{17 << 48, 79 << 48}}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("prefixed support = %v, %v; want %v", got, err, want)
+	}
+}
+
 func TestBoundedSupport(t *testing.T) {
 	var bcd map[string]any
 	if err := json.Unmarshal([]byte(`{"css":{"feature":{"__compat":{"support":{"chrome":{"version_added":"≤37","version_removed":"40"}}}}}}`), &bcd); err != nil {

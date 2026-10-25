@@ -174,3 +174,17 @@
 168 CapReadingFlow reading-flow css.properties.reading-flow
 169 CapTransitionBehavior transition-behavior css.properties.transition-behavior
 170 CapDisplayP3 color-function css.types.color.color
+171 CapTransition transitions css.properties.transition css.properties.transition-property css.properties.transition-duration css.properties.transition-delay css.properties.transition-timing-function
+172 CapAnimation animations-css css.properties.animation css.properties.animation-name css.properties.animation-duration css.properties.animation-delay css.properties.animation-timing-function css.properties.animation-iteration-count css.properties.animation-direction css.properties.animation-fill-mode css.properties.animation-play-state
+173 CapTransformOrigin transforms2d css.properties.transform-origin
+174 CapBackfaceVisibility transforms3d css.properties.backface-visibility
+175 CapPerspective transforms3d css.properties.perspective css.properties.perspective-origin
+176 CapObjectFit object-fit css.properties.object-fit
+177 CapFilter filter css.properties.filter
+178 CapTabSize tab-size css.properties.tab-size
+179 CapTouchAction touch-action css.properties.touch-action
+180 CapFontFeatureSettings font-feature-settings css.properties.font-feature-settings
+181 CapTextSizeAdjust text-size-adjust css.properties.text-size-adjust
+182 CapColumnGap multi-column css.properties.column-gap
+183 CapMaskLonghands masks css.properties.mask-image css.properties.mask-size css.properties.mask-position
+184 CapTextDecorationSkipInk text-decoration-skip-ink css.properties.text-decoration-skip-ink
