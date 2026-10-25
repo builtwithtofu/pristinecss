@@ -62,7 +62,7 @@ The build stores one complete output per distinct projected `Target.Caps`, plus 
 
 `CSS(dst, caps)` copies the richest stored output whose required capabilities are present in `caps`. If none fits, it copies the most-lowered output. Richness counts the projected target's capabilities. Remaining ties use the lowest projected capability bitmask, independent of target order. `Key(caps)` identifies the binary and selected variant, ignoring capabilities that do not change the selection.
 
-The first rewrite expands `inset` to four sides.
+The rewrites expand `inset` to four sides and convert in-gamut literal `oklch()`/`oklab()` to legacy `rgb()`/`rgba()` with integer RGB channels. Alpha is preserved. Colours that need gamut mapping remain unchanged with a gap, as do `var()`, `calc()`, `none` and relative colour expressions. In-gamut conversions are `Identical` apart from serialization rounding.
 
 Inset expansion validates the whole declaration, including priority. Only one to four lengths, percentages or `auto`, or a single CSS-wide keyword, are expanded. Literal `calc()` arithmetic is type-checked; unsupported math functions, substitutions and invalid values remain unchanged with a positioned gap. The parser recognises escaped, ASCII case-insensitive `important` names even without lowering; rewrites use its `FlagImportant` metadata.
 

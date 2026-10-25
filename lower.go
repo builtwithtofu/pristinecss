@@ -81,6 +81,8 @@ type rewrite struct {
 
 var rewrites = map[Cap]rewrite{
 	CapInset: {fidelity: Identical, lower: (*lowering).inset},
+	CapOklch: {fidelity: Identical, lower: (*lowering).colors},
+	CapOklab: {fidelity: Identical, lower: (*lowering).colors},
 }
 
 type lowering struct {
@@ -133,6 +135,40 @@ func (w *lowering) permit(lo, hi uint32) bool {
 func (w *lowering) lex(value string) {
 	w.raw = append(w.raw[:0], value...)
 	w.tokens = lexer.LexInto(w.raw, w.tokens)
+}
+
+func (w *lowering) colors(e styleSpan, src string) {
+	w.lex(src[e.valueLo:e.valueEnd])
+	name := "oklch"
+	if w.cap == CapOklab {
+		name = "oklab"
+	}
+	for i := 0; i+1 < len(w.tokens); i++ {
+		t := w.tokens[i]
+		if t.Type != lexer.Ident || !cssNameEqual(string(w.raw[t.Start:t.End]), name) || w.tokens[i+1].Type != lexer.LParen {
+			continue
+		}
+		j, depth := i+2, 1
+		for ; j < len(w.tokens) && depth != 0; j++ {
+			switch w.tokens[j].Type {
+			case lexer.LParen:
+				depth++
+			case lexer.RParen:
+				depth--
+			}
+		}
+		lo := e.valueLo + t.Start
+		if depth != 0 {
+			w.used = true
+			w.cannot(lo, e.valueEnd, "cannot lower: unclosed colour")
+			break
+		}
+		hi := w.tokens[j-1].End
+		if w.permit(lo, e.valueLo+hi) {
+			w.color(w.raw[t.Start:hi], lo, e.valueLo+hi, int(t.End-t.Start))
+		}
+		i = j - 1
+	}
 }
 
 func (w *lowering) inset(e styleSpan, src string) {
