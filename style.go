@@ -22,10 +22,10 @@ var checksumTable = crc32.MakeTable(crc32.Castagnoli)
 
 func checksum(b []byte) uint32 { return crc32.Checksum(b, checksumTable) }
 
-// ToBinary builds a spans binary from CSS, returning Parse's diagnostics.
+// ToBinary builds a spans binary from CSS and reports diagnostics and variants.
 // Even malformed CSS produces a best-effort binary, just as Parse returns a Sheet.
 // The result owns its bytes and does not retain css.
-func ToBinary(css []byte) ([]byte, []ParseError) {
+func ToBinary(css []byte, o Options) ([]byte, Report) {
 	s, diags := Parse(css)
 	spans := styleSpans(s)
 	var index []byte
@@ -50,8 +50,13 @@ func ToBinary(css []byte) ([]byte, []ParseError) {
 	out = append(out, css...)
 	out = append(out, mini...)
 	out = append(out, pretty...)
+	report := Report{Errors: diags, Variants: 1}
+	if len(o.Lower) != 0 {
+		out = buildVariants(out, css, spans, o, &report)
+	}
 	out = binary.LittleEndian.AppendUint32(out, checksum(out))
-	return out, diags
+	report.Bytes = len(out)
+	return out, report
 }
 
 // Open opens a trusted binary without validation or copying, in constant time.
@@ -65,7 +70,7 @@ func Open(b string) *Style { return &Style{blob: b} }
 // what Sheet.Emit would produce for the stored source.
 func Load(b []byte) (*Style, error) {
 	bad := errors.New("pristinecss: invalid spans binary; regenerate with ToBinary")
-	if len(b) < styleHeaderLen+4 || string(b[:4]) != "PCS1" {
+	if len(b) < styleHeaderLen+4 || (string(b[:4]) != "PCS1" && string(b[:4]) != "PCS2") {
 		return nil, bad
 	}
 	end := len(b) - 4
@@ -74,11 +79,15 @@ func Load(b []byte) (*Style, error) {
 	}
 	field := func(off int) uint64 { return uint64(binary.LittleEndian.Uint32(b[off:])) }
 	srcLen, count, indexLen, minLen, prettyLen := field(4), field(8), field(12), field(16), field(20)
-	if uint64(styleHeaderLen)+indexLen+srcLen+minLen+prettyLen != uint64(end) {
+	baseEnd := uint64(styleHeaderLen) + indexLen + srcLen + minLen + prettyLen
+	if baseEnd > uint64(end) || (string(b[:4]) == "PCS1" && baseEnd != uint64(end)) {
 		return nil, bad
 	}
 	i := styleHeaderLen + int(indexLen)
 	if !validStyleIndex(b[styleHeaderLen:i], count, srcLen) {
+		return nil, bad
+	}
+	if string(b[:4]) == "PCS2" && !validVariants(b, int(baseEnd), end) {
 		return nil, bad
 	}
 	return Open(string(b)), nil
@@ -92,11 +101,21 @@ func (s *Style) Source() string {
 
 // CSS appends minified CSS to dst, or pretty CSS when passed Pretty.
 // Only the Minified and Pretty presets are supported, not custom EmitStyle
-// settings. With enough capacity in dst it allocates nothing. caps must be Modern.
+// settings. With enough capacity in dst it allocates nothing. caps selects a
+// finished variant; only rewrites opted into at build time can be selected.
 func (s *Style) CSS(dst []byte, caps Caps, opts ...EmitStyle) []byte {
 	b := s.blob
 	off := styleHeaderLen + int(styleU32(b, 12)) + int(styleU32(b, 4))
 	n := int(styleU32(b, 16))
+	if b[3] == '2' {
+		table := off + n + int(styleU32(b, 20))
+		entry := table + variantHeaderLen + int(s.variant(caps, table))*variantEntryLen + 32
+		if len(opts) > 0 && len(opts[len(opts)-1].Newline) != 0 {
+			entry += 8
+		}
+		off, n = int(styleU32(b, entry)), int(styleU32(b, entry+4))
+		return append(dst, b[off:off+n]...)
+	}
 	if len(opts) > 0 && len(opts[len(opts)-1].Newline) != 0 {
 		off += n
 		n = int(styleU32(b, 20))
